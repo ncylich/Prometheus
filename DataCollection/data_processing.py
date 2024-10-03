@@ -5,15 +5,30 @@ import matplotlib.pyplot as plt
 import gc
 
 
-def read_parquet(input_file, smush_times=False):
+def read_parquet(input_file, smush_times=False, expected_expiry_dist=-1, y_var='close'):
     # Read the parquet file into a DataFrame
     print("Reading parquet file...")
     df = pq.read_table(input_file).to_pandas()
-    df = df.rename(columns={'date': 'ds', 'close': 'y'})[['ds', 'y']]
-    df = df.sort_values(by='ds')
+    # re-setting up the index
+    df = df.reset_index(drop=False)
+    df = df.rename(columns={'date': 'ds', y_var: 'y'})
 
     df['ds'] = pd.to_datetime(df['ds'], utc=True)
     df['ds'] = df['ds'].dt.tz_convert('America/New_York')
+
+    if expected_expiry_dist >= 0:
+        def expiry_dist(expiry, ds):
+            expiry_month, expiry_year = expiry % 100, expiry // 100
+            total_expiry_month = expiry_month + expiry_year * 12
+            total_ds_month = ds.month + ds.year * 12
+            return total_expiry_month - total_ds_month
+        df['expiry_dist'] = df.apply(lambda x: expiry_dist(x['expiry'], x['ds']), axis=1)
+        df = df[df['expiry_dist'] == expected_expiry_dist]
+        df = df.drop(columns=['expiry_dist'])
+
+    df = df[['ds', 'y']]
+    df = df.sort_values(by='ds')
+
 
     if smush_times: # doesn't work well because of the jumps
         offset = 0.0
@@ -42,7 +57,7 @@ def read_parquet(input_file, smush_times=False):
 
 
 def print_forecasts(input_data, actual, forecasts, forecast_col):
-    print(forecasts)
+    # print(forecasts)
 
     # Plot actual values
     plt.plot(input_data['ds'], input_data['y'], label='Input')
@@ -60,4 +75,4 @@ def test_train_split(df, test_size_ratio):
 
 
 if __name__ == "__main__":
-    df_prepared = read_parquet("aug16-2024-2yrs.parquet", True)
+    df_prepared = read_parquet("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3)
