@@ -56,14 +56,20 @@ class NHitsBlock(nn.Module):
         self.hidden_dim = hidden_dim  # backcast_size // pool_size
         self.hidden_downsample = max(math.ceil(self.hidden_dim / freq_downsample), 1)
 
-        self.ffn = nn.ModuleList()
-        self.ffn.append(nn.Linear(self.backcast_size // pool_size, self.hidden_dim))
-        self.ffn.append(nn.ReLU())
-        for _ in range(n_layers-1):
-            self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_dim))
-            self.ffn.append(nn.ReLU())
-        self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_downsample))
-        self.ffn.append(nn.ReLU())
+        # self.ffn = nn.ModuleList()
+        # self.ffn.append(nn.Linear(self.backcast_size // pool_size, self.hidden_dim))
+        # self.ffn.append(nn.ReLU())
+        # for _ in range(n_layers-1):
+        #     self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_dim))
+        #     self.ffn.append(nn.ReLU())
+        # self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_downsample))
+        # self.ffn.append(nn.ReLU())
+
+        # use nn.Sequential instead of ModuleList
+        layers = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
+                  [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()] * (n_layers-1) +
+                  [nn.Linear(self.hidden_dim, self.hidden_downsample), nn.ReLU()])
+        self.ffn = nn.Sequential(*layers)
 
         self.backcast = nn.Linear(self.hidden_downsample, backcast_size // pool_size)  # self.hidden_dim)
         self.forecast = nn.Linear(self.hidden_downsample, forecast_size // pool_size)

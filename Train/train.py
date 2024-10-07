@@ -4,6 +4,7 @@ from time import sleep
 import torch
 from torch import nn
 from torch.nn import L1Loss, MSELoss
+from torch.nn import functional as F
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
@@ -61,7 +62,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
         scheduler.step(epoch_loss)
 
-        test_losses = np.array([0.0, 0.0])
+        test_losses = torch.tensor([0,0], dtype=torch.float32)
         model.eval()
         with torch.no_grad():
             for x, y in test_loader:
@@ -74,10 +75,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
 
 def mae_and_mse_loss(forecast, actual, remove_volume=False):
-    diff = forecast.detach().numpy() - actual.detach().numpy()
-    if remove_volume:
-        diff = diff[:len(diff) // 2]
-    return np.array([np.mean(np.abs(diff)), np.mean(diff ** 2)])
+    return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 
 def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
