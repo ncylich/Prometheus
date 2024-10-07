@@ -92,6 +92,5 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
     return data_dataloader, test_dataloader
 
 
-
 if __name__ == '__main__':
     data_loader, test_loader = get_data_loaders(72, 36, test_size_ratio=.2, batch_size=128)
