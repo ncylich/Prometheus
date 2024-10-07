@@ -6,7 +6,7 @@ from statsforecast.models import AutoARIMA
 from neuralforecast import NeuralForecast
 from statsforecast import StatsForecast
 from neuralforecast.losses.pytorch import DistributionLoss
-from data_processing import read_parquet, print_forecasts, test_train_split
+from data_processing import read_parquet_nixtla, print_forecasts, test_train_split
 # DO NOT USE SKLEARN (messes up neuralforecast & statsforecast)
 import os
 
@@ -22,7 +22,7 @@ input_size = input_multiple_upper_bound * forecast_size
 
 random_seed = np.random.randint(0, int(1e6))
 
-df_prepared = read_parquet("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3, y_var='close')
+df_prepared = read_parquet_nixtla("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3, y_var='close')
 
 # Convert the data to a simple integer index, necessary for models like NHITS and NBEATS
 df_prepared['unique_id'] = 'stock_value'
@@ -94,6 +94,7 @@ def predict_test(nf, test, col_name):
         total_loss += loss
         count += 1
         # print(f'Loss: {loss}')
+        # print_forecasts(input_data, actual, forecast, col_name)
     print(f'Average Loss: {total_loss/count}')
     print_forecasts(input_data, actual, forecast, col_name)
 
@@ -202,6 +203,6 @@ def horizontal_line_test():
 # Uncomment the model you want to run
 # arima()
 # nbeats()
-# nhits()
+nhits()
 # linear_regression_test()
-horizontal_line_test()
+# horizontal_line_test()
