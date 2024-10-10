@@ -84,6 +84,8 @@ class NHitsBlock(nn.Module):
 
         self.forecast1 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
         self.forecast12 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
+        self.forecast2 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
+        self.forecast21 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
 
         self.pool = nn.MaxPool1d(pool_size)
         self.interpolate_mode = interpolate_mode
@@ -109,9 +111,11 @@ class NHitsBlock(nn.Module):
         backcast2 = self.interpolate_cast(backcast2, self.backcast_size)
 
         forecast1 = self.forecast1(x1) + self.forecast12(x)
+        forecast2 = self.forecast2(x2) + self.forecast21(x)
         forecast1 = self.interpolate_cast(forecast1, self.forecast_size)
+        forecast2 = self.interpolate_cast(forecast2, self.forecast_size)
 
-        return backcast1, backcast2, forecast1
+        return backcast1, backcast2, forecast1, forecast2
 
 class Nhits(nn.Module):
     def __init__(self, backcast_size, forecast_size, n_layers, stack_pools, stack_mlp_freq_downsamples, n_blocks,
@@ -137,14 +141,15 @@ class Nhits(nn.Module):
     def forward(self, x):
         x1 = x[:, :self.backcast_size]
         x2 = x[:, self.backcast_size:]
-        net_forecast1 = torch.zeros_like(x1[:, :self.forecast_size])
+        net_forecast1, net_forecast2 = torch.zeros_like(x1[:, :self.forecast_size]), torch.zeros_like(x2[:, :self.forecast_size])
         for stack in self.stacks:
             for block in stack:
-                backcast1, backcast2, forecast1 = block(x1, x2)
+                backcast1, backcast2, forecast1, forecast2 = block(x1, x2)
                 x1 = x1 - backcast1
                 x2 = x2 - backcast2
                 net_forecast1 = net_forecast1 + forecast1
-        return net_forecast1
+                net_forecast2 = net_forecast2 + forecast2
+        return torch.cat((net_forecast1, net_forecast2), dim=-1)
 
 
 if __name__ == '__main__':

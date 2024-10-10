@@ -31,7 +31,7 @@ class CrudeClosingPriceDataset(Dataset):
 class CrudeClosingAndVolumeDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close'):
         self.price_data = data[predict_col].to_numpy()
-        self.volume_data = data['volume'].to_numpy()
+        self.volume_data = data['volume'].to_numpy() / 100
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
 
@@ -43,7 +43,8 @@ class CrudeClosingAndVolumeDataset(Dataset):
                             self.volume_data[idx:idx + self.backcast_size]])
         # y = np.concatenate([self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size],
         #                     self.volume_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]])
-        y = self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]
+        y = np.concatenate([self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size],
+                            self.volume_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]])
         return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device)
 
 
@@ -67,6 +68,9 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         with torch.no_grad():
             for x, y in test_loader:
                 forecast = model(x).squeeze(0)
+                # halving values to only consider price data
+                forecast = forecast[:, : model.forecast_size]
+                y = y[:, : model.forecast_size]
                 test_losses += mae_and_mse_loss(forecast, y, remove_volume=volume_included)
         test_losses /= len(test_loader)
         sleep(1e-5)
