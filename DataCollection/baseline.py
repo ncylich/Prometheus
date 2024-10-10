@@ -6,6 +6,8 @@ from statsforecast.models import AutoARIMA
 from neuralforecast import NeuralForecast
 from statsforecast import StatsForecast
 from neuralforecast.losses.pytorch import DistributionLoss
+
+from DataCollection.data_processing import read_processed_parquet
 from data_processing import read_parquet_nixtla, print_forecasts, test_train_split
 # DO NOT USE SKLEARN (messes up neuralforecast & statsforecast)
 import os
@@ -22,15 +24,20 @@ input_size = input_multiple_upper_bound * forecast_size
 
 random_seed = np.random.randint(0, int(1e6))
 
-df_prepared = read_parquet_nixtla("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3, y_var='close')
+df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", reset_times=True, expected_expiry_dist=3)
+df_prepared.rename(columns={'date': 'ds', 'close': 'y'}, inplace=True)
+df_prepared = df_prepared[['ds', 'y']]
 
 # Convert the data to a simple integer index, necessary for models like NHITS and NBEATS
 df_prepared['unique_id'] = 'stock_value'
 
+print(np.mean(df_prepared['y'].to_numpy()))
+
 
 # Results: MAE loss = 0.39, MSE loss = .326, literally a horizontal line
+# Volume: Train all at once: MAE = 131, MSE = 43,000, Train for each: MAE = 115, MSE = 36,500
 def arima():
-    train_for_each = False
+    train_for_each = True
 
     global df_prepared
 
@@ -41,7 +48,7 @@ def arima():
     if not train_for_each:
         sf.fit(df_prepared)
 
-    total_loss = 0
+    total_loss = np.array([0.0, 0.0])
     total_slope = 0
     input_data, actual, forecast = None, None, None
     actual_input_size = input_size if train_for_each else forecast_size
@@ -71,13 +78,12 @@ def arima():
 
 def test_error(forecast, forecast_col, actual):
     diff = forecast[forecast_col].to_numpy() - actual['y'].to_numpy()
-    # return np.mean(np.abs(diff))  # L1, MAE
-    return np.mean(diff ** 2)  # L2, MSE
+    return np.array([np.mean(np.abs(diff)), np.mean(diff ** 2)])
 
 
 def predict_test(nf, test, col_name):
     input_data, forecast, actual = None, None, None
-    total_loss = 0
+    total_loss = np.array([0.0, 0.0])
     count = 0
 
     start_idx = input_multiple_upper_bound * forecast_size
@@ -100,6 +106,7 @@ def predict_test(nf, test, col_name):
 
 
 # MAE loss = 0.23, MSE loss = .13 - Much better than ARIMA
+# Volume: MAE = 84, MSE = 25000
 def nbeats():
     # NeuralForecast setup for NBEATS
     print('Training NBEATS...')
@@ -124,6 +131,7 @@ def nbeats():
     predict_test(nf, df_test, 'AutoNBEATS')
 
 # MAE loss = 0.24, MSE loss = 0.13 - Much better than ARIMA
+# Volume: MAE = 85, MSE =27,500
 def nhits():
     # NeuralForecast setup for NHITS
     print('Training NHITS...')
@@ -201,8 +209,8 @@ def horizontal_line_test():
 
 
 # Uncomment the model you want to run
-# arima()
+arima()
 # nbeats()
-nhits()
+# nhits()
 # linear_regression_test()
 # horizontal_line_test()
