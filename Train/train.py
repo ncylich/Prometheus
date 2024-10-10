@@ -31,7 +31,7 @@ class CrudeClosingPriceDataset(Dataset):
 class CrudeClosingAndVolumeDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close'):
         self.price_data = data[predict_col].to_numpy()
-        self.volume_data = data['volume'].to_numpy() / 100
+        self.volume_data = data['volume'].to_numpy() / 1e3  # DOWN-SCALING so that Loss is dominated by price
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
 
@@ -68,17 +68,17 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         with torch.no_grad():
             for x, y in test_loader:
                 forecast = model(x).squeeze(0)
-                # halving values to only consider price data
+                # halving values to only consider price data (if applicable)
                 forecast = forecast[:, : model.forecast_size]
                 y = y[:, : model.forecast_size]
-                test_losses += mae_and_mse_loss(forecast, y, remove_volume=volume_included)
+                test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         sleep(1e-5)
 
 
-def mae_and_mse_loss(forecast, actual, remove_volume=False):
+def mae_and_mse_loss(forecast, actual):
     return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 

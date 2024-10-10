@@ -15,6 +15,7 @@ from torch import nn
 import numpy as np
 import math
 
+# 2D Input -> 1D Output
 
 lr = 1e-3
 batch_size = 1024
