@@ -27,11 +27,11 @@ backcast_size = forecast_size * 2
 # Barely better by takes 50% longer for .1% better
 # stack_pools = [18, 8, 4, 2, 1]
 # stack_mlp_freq_downsamples = [24, 12, 4, 2, 1]
-stack_pools = [18, 8, 4, 2]
+stack_pools = [12, 6, 4, 2]
 stack_mlp_freq_downsamples = [24, 12, 4, 1]
 
 hidden_dim = 256
-n_blocks = 6
+n_blocks = 3
 n_layers = 3
 interpolate = 'linear'
 
@@ -68,53 +68,55 @@ class NHitsBlock(nn.Module):
         # self.ffn.append(nn.ReLU())
 
         # use nn.Sequential instead of ModuleList
-        layers = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
+        layers1 = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
                   [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()] * (n_layers-1) +
                   [nn.Linear(self.hidden_dim, self.hidden_downsample), nn.ReLU()])
-        self.ffn = nn.Sequential(*layers)
+        layers2 = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
+                    [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()] * (n_layers-1) +
+                    [nn.Linear(self.hidden_dim, self.hidden_downsample), nn.ReLU()])
+        self.ffn1 = nn.Sequential(*layers1)
+        self.ffn2 = nn.Sequential(*layers2)
 
-        self.backcast = nn.Linear(self.hidden_downsample, backcast_size // pool_size)  # self.hidden_dim)
-        self.forecast = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
+        self.backcast1 = nn.Linear(self.hidden_downsample, backcast_size // pool_size)
+        self.backcast12 = nn.Linear(self.hidden_downsample, backcast_size // pool_size)
+        self.backcast2 = nn.Linear(self.hidden_downsample, backcast_size // pool_size)
+        self.backcast21 = nn.Linear(self.hidden_downsample, backcast_size // pool_size)
+
+        self.forecast1 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
+        self.forecast12 = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
+
         self.pool = nn.MaxPool1d(pool_size)
         self.interpolate_mode = interpolate_mode
 
-    def forward(self, x):
-        x = self.pool(x)
-        for layer in self.ffn:
-            x = layer(x)
-        backcast = self.backcast(x)
-        forecast = self.forecast(x)
-
-        interpolated_forecast = nn.functional.interpolate(
-            forecast.unsqueeze(1),
-            size=self.forecast_size,
-            mode=self.interpolate_mode
+    def interpolate_cast(self, cast, final_size, interpolate_mode=''):
+        return nn.functional.interpolate(
+            cast.unsqueeze(1),
+            size=final_size,
+            mode=interpolate_mode if interpolate_mode else self.interpolate_mode
         ).squeeze(1)
 
-        # Expand backcast to match the original input size
-        backcast = nn.functional.interpolate(
-            backcast.unsqueeze(1),
-            size=self.backcast_size,
-            mode='nearest'
-        ).squeeze(1)
+    def forward(self, x1, x2):
+        x1, x2 = self.pool(x1), self.pool(x2)
+        for layer in self.ffn1:
+            x1 = layer(x1)
+        for layer in self.ffn2:
+            x2 = layer(x2)
+        x = x1 + x2
 
-        return backcast, interpolated_forecast
+        backcast1 = self.backcast1(x1) + self.backcast12(x)
+        backcast2 = self.backcast2(x2) + self.backcast21(x)
+        backcast1 = self.interpolate_cast(backcast1, self.backcast_size)
+        backcast2 = self.interpolate_cast(backcast2, self.backcast_size)
+
+        forecast1 = self.forecast1(x1) + self.forecast12(x)
+        forecast1 = self.interpolate_cast(forecast1, self.forecast_size)
+
+        return backcast1, backcast2, forecast1
 
 class Nhits(nn.Module):
-    """
-    Simple Neural Hits model
-    Steps:
-    1. Make blocks
-        A. each block has a pool size and a frequency downsample
-    2. Forward pass
-        A. MaxPool1D
-        B. block
-        C. subtract backcast from input, add forecast to output
-    """
     def __init__(self, backcast_size, forecast_size, n_layers, stack_pools, stack_mlp_freq_downsamples, n_blocks,
                  hidden_dim = 512, interpolate_mode='linear', volume_included=False):
         super(Nhits, self).__init__()
-        backcast_size *= 2 if volume_included else 1
         # forecast_size *= 2 if volume_included else 1
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size  # * (2 if volume_included else 1)
@@ -133,22 +135,25 @@ class Nhits(nn.Module):
 
 
     def forward(self, x):
-        net_forecast = torch.zeros_like(x[:, :self.forecast_size])
+        x1 = x[:, :self.backcast_size]
+        x2 = x[:, self.backcast_size:]
+        net_forecast1 = torch.zeros_like(x1[:, :self.forecast_size])
         for stack in self.stacks:
             for block in stack:
-                backcast, forecast = block(x)
-                x = x - backcast
-                net_forecast = net_forecast + forecast
-        return net_forecast
+                backcast1, backcast2, forecast1 = block(x1, x2)
+                x1 = x1 - backcast1
+                x2 = x2 - backcast2
+                net_forecast1 = net_forecast1 + forecast1
+        return net_forecast1
 
 
 if __name__ == '__main__':
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=test_size_ratio,
-                                    batch_size=batch_size, dataset_col=test_col, include_volume=0)
+                                    batch_size=batch_size, dataset_col=test_col, include_volume=True)
 
     model = Nhits(backcast_size, forecast_size, n_layers=n_layers, stack_pools=stack_pools,
                   stack_mlp_freq_downsamples=stack_mlp_freq_downsamples, n_blocks=n_blocks,
-                  volume_included=0, interpolate_mode=interpolate).to(device)
+                  volume_included=True, interpolate_mode=interpolate).to(device)
 
 
     def initialize_weights(module):
@@ -158,11 +163,11 @@ if __name__ == '__main__':
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
-    # model.apply(initialize_weights)
+    model.apply(initialize_weights)
 
     criterion = torch.nn.L1Loss()
     # criterion = MSELoss()
     optimizer = AdamW(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
 
-    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs, volume_included=include_volume)
+    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs, volume_included=True)
