@@ -24,7 +24,7 @@ epochs = 50
 init_weight_magnitude = 1e-3
 
 forecast_size = 36
-backcast_size = forecast_size * 2
+backcast_size = forecast_size
 
 # Barely better by takes 50% longer for .1% better
 # stack_pools = [18, 8, 4, 2, 1]
@@ -32,10 +32,11 @@ backcast_size = forecast_size * 2
 stack_pools = [18, 8, 4, 2]
 stack_mlp_freq_downsamples = [24, 12, 4, 1]
 
-hidden_dim = 256
-n_blocks = 6
+hidden_dim = 512
+n_blocks = 1
 n_layers = 3
 interpolate = 'linear'
+include_volume = 1
 
 test_size_ratio = .2
 test_sample_size = 100
@@ -60,15 +61,6 @@ class NHitsBlock(nn.Module):
         self.hidden_dim = hidden_dim  # backcast_size // pool_size
         self.hidden_downsample = max(math.ceil(self.hidden_dim / freq_downsample), 1)
 
-        # self.ffn = nn.ModuleList()
-        # self.ffn.append(nn.Linear(self.backcast_size // pool_size, self.hidden_dim))
-        # self.ffn.append(nn.ReLU())
-        # for _ in range(n_layers-1):
-        #     self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_dim))
-        #     self.ffn.append(nn.ReLU())
-        # self.ffn.append(nn.Linear(self.hidden_dim, self.hidden_downsample))
-        # self.ffn.append(nn.ReLU())
-
         # use nn.Sequential instead of ModuleList
         layers = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
                   [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()] * (n_layers-1) +
@@ -82,12 +74,13 @@ class NHitsBlock(nn.Module):
 
     def forward(self, x):
         x = self.pool(x)
+
         for layer in self.ffn:
             x = layer(x)
         backcast = self.backcast(x)
         forecast = self.forecast(x)
 
-        interpolated_forecast = nn.functional.interpolate(
+        forecast = nn.functional.interpolate(
             forecast.unsqueeze(1),
             size=self.forecast_size,
             mode=self.interpolate_mode
@@ -100,7 +93,7 @@ class NHitsBlock(nn.Module):
             mode='nearest'
         ).squeeze(1)
 
-        return backcast, interpolated_forecast
+        return backcast, forecast
 
 class Nhits(nn.Module):
     """
