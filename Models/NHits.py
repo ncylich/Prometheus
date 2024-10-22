@@ -1,6 +1,7 @@
 # Reference GitHub: https://github.com/Nixtla/neuralforecast
-from torchvision.ops.misc import interpolate
+from xml.etree.ElementInclude import include
 
+from torchvision.ops.misc import interpolate
 from Train.train import train_model, get_data_loaders
 from enum import Enum
 import torch
@@ -10,18 +11,18 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-import torch
-from torch import nn
 import numpy as np
 import math
 
 # 1D Input -> 1D Output
 
 
-lr = 1e-3
-batch_size = 1024
+lr = 1e-2
+batch_size = 2048
 epochs = 50
 init_weight_magnitude = 1e-3
+
+include_velocity = 1
 
 forecast_size = 36
 backcast_size = forecast_size
@@ -29,10 +30,13 @@ backcast_size = forecast_size
 # Barely better by takes 50% longer for .1% better
 # stack_pools = [18, 8, 4, 2, 1]
 # stack_mlp_freq_downsamples = [24, 12, 4, 2, 1]
-stack_pools = [18, 8, 4, 2]
-stack_mlp_freq_downsamples = [24, 12, 4, 1]
+# stack_pools = [18, 8, 4, 2]
+# stack_mlp_freq_downsamples = [24, 12, 4, 1]
 
-hidden_dim = 512
+stack_pools = [18, 8, 2, 1]
+stack_mlp_freq_downsamples = [24, 12, 3, 1]
+
+hidden_dim = 128
 n_blocks = 1
 n_layers = 3
 interpolate = 'linear'
@@ -62,14 +66,14 @@ class NHitsBlock(nn.Module):
         self.hidden_downsample = max(math.ceil(self.hidden_dim / freq_downsample), 1)
 
         # use nn.Sequential instead of ModuleList
-        layers = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.ReLU()] +
-                  [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()] * (n_layers-1) +
-                  [nn.Linear(self.hidden_dim, self.hidden_downsample), nn.ReLU()])
+        layers = ([nn.Linear(self.backcast_size // pool_size, self.hidden_dim), nn.GELU()] +
+                  [nn.Linear(self.hidden_dim, self.hidden_dim), nn.GELU()] * (n_layers-1) +
+                  [nn.Linear(self.hidden_dim, self.hidden_downsample), nn.GELU()])
         self.ffn = nn.Sequential(*layers)
 
         self.backcast = nn.Linear(self.hidden_downsample, backcast_size // pool_size)  # self.hidden_dim)
         self.forecast = nn.Linear(self.hidden_downsample, forecast_size // pool_size)
-        self.pool = nn.MaxPool1d(pool_size)
+        self.pool = nn.AdaptiveMaxPool1d(pool_size)
         self.interpolate_mode = interpolate_mode
 
     def forward(self, x):
@@ -139,7 +143,7 @@ class Nhits(nn.Module):
 
 if __name__ == '__main__':
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=test_size_ratio,
-                                    batch_size=batch_size, dataset_col=test_col, include_volume=0)
+                                    batch_size=batch_size, dataset_col=test_col, include_volume=0, include_velocity=include_velocity)
 
     model = Nhits(backcast_size, forecast_size, n_layers=n_layers, stack_pools=stack_pools,
                   stack_mlp_freq_downsamples=stack_mlp_freq_downsamples, n_blocks=n_blocks,
@@ -155,9 +159,9 @@ if __name__ == '__main__':
 
     # model.apply(initialize_weights)
 
-    criterion = torch.nn.L1Loss()
-    # criterion = MSELoss()
+    # criterion = torch.nn.L1Loss()
+    criterion = MSELoss()
     optimizer = AdamW(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=2)
 
-    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs, volume_included=include_volume)
+    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs, volume_included=include_volume, velocity_dataset=include_velocity)

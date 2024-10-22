@@ -1,4 +1,5 @@
 from DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+from Models.NHits import include_velocity
 from Train.train import train_model, get_data_loaders
 import torch
 from torch import nn
@@ -23,20 +24,23 @@ batch_size = 512
 epochs = 50
 dropout = 0.0
 
-forecast_size = 36
-backcast_size = forecast_size * 2
+use_velocity = 1
+include_volume = 0
 
-n_harmonics = 3
-poly_degree = 3
+forecast_size = 36
+backcast_size = forecast_size * 4
+
+n_harmonics = 12
+poly_degree = 2
 n_blocks = 3
-stacks = [BlockType.IDENTITY, BlockType.TREND, BlockType.SEASONALITY]
+stacks = [BlockType.IDENTITY, BlockType.SEASONALITY]
 # stack_random_weights = [1e-1, 10 ** (-poly_degree), 1e-1]
 # init_weight_magnitude = 1e-3
 hidden_dim = 512
 
 test_size_ratio = .2
 test_sample_size = 100
-test_col = 'close'
+test_col = 'volume'  # 'close' or 'volume'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -48,27 +52,34 @@ class NBeatsBlock(nn.Module):
     1. FFN
     2. BackCast, Forecast Layers
     """
-    def __init__(self, backcast_size, forecast_size, n_layers=4, block_type = BlockType.IDENTITY, n_harmonics=2,
-        poly_degree=2, hidden_dim=-1, dropout=0.2):
+    def __init__(self, backcast_size, forecast_size, n_layers=4, block_type = BlockType.IDENTITY,
+                 n_harmonics=2, poly_degree=2, hidden_dim=-1, dropout=0.2, include_volume=True):
         # poly degree must be small (<5)
         super(NBeatsBlock, self).__init__()
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
+
         self.hidden_dim = (backcast_size + forecast_size) * 4 if hidden_dim == -1 else hidden_dim
         self.block_type = block_type
+
+        self.include_volume = include_volume
         self.n_harmonics = n_harmonics
         self.poly_degree = poly_degree
         self.dropout=dropout
+
+        self.price_transform = nn.Linear(backcast_size//2, backcast_size)
+        self.volume_transform = nn.Linear(backcast_size//2, backcast_size)
+        self.GELU = nn.GELU()
 
         self.ffn = nn.ModuleList()
         start_size = self.backcast_size
         for _ in range(n_layers):
             self.ffn.append(nn.Linear(start_size, self.hidden_dim))
             start_size = self.hidden_dim
-            self.ffn.append(nn.ReLU())  # GELU?
+            self.ffn.append(nn.GELU())
             self.ffn.append(nn.Dropout(dropout))
 
-        if block_type == block_type.IDENTITY:
+        if block_type == block_type.IDENTITY:  # works really poorly for this application
             self.final_layer_output_size = -1
             self.backcast = nn.Linear(self.hidden_dim, backcast_size)
             self.forecast = nn.Linear(self.hidden_dim, forecast_size)
@@ -112,6 +123,11 @@ class NBeatsBlock(nn.Module):
         return torch.cat(basis, dim=0)  # Shape: (2 * n_harmonics, time_grid_size)
 
     def forward(self, x):
+        if self.include_volume:
+            x1 = self.price_transform(x[:, :self.backcast_size//2])
+            x2 = self.volume_transform(x[:, self.backcast_size//2:])
+            x = self.GELU(x1) + self.GELU(x2)
+
         for layer in self.ffn:
             x = layer(x)
         backcast = self.backcast(x)
@@ -127,6 +143,7 @@ class NBeatsBlock(nn.Module):
         return backcast, forecast
 
     def initialize_ffn_weights(self):
+        return
         def initialize_weights(module):
             if isinstance(module, nn.Linear):
                 # nn.init.kaiming_uniform_(module.weight, nonlinearity='relu')
@@ -140,7 +157,8 @@ class NBeats(nn.Module):
     def __init__(self, backcast_size, forecast_size, n_blocks, stacks, hidden_dim=-1,
                  n_harmonics=2, poly_degree=2, dropout=0.0, volume_included=False):
         super(NBeats, self).__init__()
-        self.backcast_size = backcast_size * (2 if volume_included else 1)
+        backcast_size = backcast_size * (2 if volume_included else 1)
+        self.backcast_size = backcast_size
         self.forecast_size = forecast_size
         self.n_blocks = n_blocks
         self.stacks = stacks
@@ -150,7 +168,8 @@ class NBeats(nn.Module):
             stack = nn.ModuleList()
             for _ in range(n_blocks):
                 stack.append(NBeatsBlock(backcast_size, forecast_size, block_type=btype, hidden_dim=hidden_dim,
-                                         n_harmonics=n_harmonics, poly_degree=poly_degree, dropout=dropout))
+                                         n_harmonics=n_harmonics, poly_degree=poly_degree, dropout=dropout,
+                                         include_volume=volume_included))
             self.stacks.append(stack)
 
     def forward(self, x):
@@ -165,10 +184,11 @@ class NBeats(nn.Module):
 
 if __name__ == '__main__':
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=test_size_ratio,
-                                                batch_size=batch_size, dataset_col=test_col)
+                                                batch_size=batch_size, dataset_col=test_col, include_velocity=use_velocity, include_volume=include_volume)
 
     model = NBeats(backcast_size=backcast_size, forecast_size=forecast_size, n_blocks=n_blocks, stacks=stacks,
-                   hidden_dim=hidden_dim, n_harmonics=n_harmonics, poly_degree=poly_degree, dropout=dropout).to(device)
+                   hidden_dim=hidden_dim, n_harmonics=n_harmonics, poly_degree=poly_degree, dropout=dropout,
+                   volume_included=include_volume).to(device)
 
     criterion = torch.nn.L1Loss()
     # criterion = MSELoss()
@@ -176,4 +196,4 @@ if __name__ == '__main__':
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=2)
     # step down LR after so many steps
 
-    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs)
+    train_model(model, data_loader, test_loader, criterion, optimizer, scheduler, epochs, velocity_dataset=use_velocity)

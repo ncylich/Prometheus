@@ -96,7 +96,7 @@ def read_parquet_nixtla(input_file, smush_times=False, expected_expiry_dist=-1, 
     return df
 
 
-def print_forecasts(input_data, actual, forecasts, forecast_col):
+def print_nf_forecasts(input_data, actual, forecasts, forecast_col):
     # print(forecasts)
 
     # Plot actual values
@@ -108,6 +108,19 @@ def print_forecasts(input_data, actual, forecasts, forecast_col):
 
     plt.legend()
     plt.show()
+
+
+def print_np_forecasts(input_data, actual, forecasts):
+    input_x = np.arange(len(input_data))
+    plt.plot(input_x, input_data['y'], label='Input')
+
+    output_x = np.arange(len(input_data), len(input_data) + len(forecasts))
+    plt.plot(output_x, actual['y'], label='Actual')
+    plt.plot(output_x, forecasts, label='Forecast', linestyle='--')
+
+    plt.legend()
+    plt.show()
+
 
 def test_train_split(df, test_size_ratio):
     test_len = int(len(df) * test_size_ratio)

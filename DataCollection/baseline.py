@@ -1,14 +1,17 @@
+import time
+
 import pandas as pd
 import numpy as np
 from neuralforecast.models import NBEATS, NHITS
 from neuralforecast.auto import AutoNBEATS, AutoNHITS, AutoFEDformer, AutoAutoformer, AutoInformer, AutoLSTM, AutoDilatedRNN
-from neuralforecast.losses.pytorch import MAE
+from neuralforecast.losses.pytorch import MAE, MSE
+import neuralforecast.core as NeuralForecast
 from statsforecast.ets import switch
 from statsforecast.models import AutoARIMA
 from neuralforecast import NeuralForecast
 from statsforecast import StatsForecast
 from neuralforecast.losses.pytorch import DistributionLoss
-from DataCollection.data_processing import read_processed_parquet, read_parquet_nixtla, print_forecasts, test_train_split
+from DataCollection.data_processing import read_processed_parquet, read_parquet_nixtla, print_nf_forecasts, print_np_forecasts, test_train_split
 from tqdm import tqdm
 import logging
 import torch
@@ -22,24 +25,24 @@ from Models.NHits import hidden_dim, Nhits
 os.environ['NIXTLA_ID_AS_COL'] = '1'
 # os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 
-num_samples = 20
+num_samples = 10
+use_saved = 0
 
 forecast_size = 36
 test_set_prop = 0.2
 test_sample_size = 100
 
-input_multiple_upper_bound = 8
+input_multiple_upper_bound = 8  # 8, 10 are best for NHITs
 input_size = input_multiple_upper_bound * forecast_size
 
-random_seed = np.random.randint(34)
+random_seed = np.random.randint(37)
 
 df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", reset_times=True, expected_expiry_dist=3)
 df_prepared.rename(columns={'date': 'ds', 'close': 'y'}, inplace=True)
 df_prepared = df_prepared[['ds', 'y']]
 
 # Convert the data to a simple integer index, necessary for models like NHITS and NBEATS
-df_prepared['unique_id'] = 'stock_value'\
-
+df_prepared['unique_id'] = 'stock_value'
 
 # Results: MAE loss = 0.39, MSE loss = .326, literally a horizontal line
 # Volume: Train all at once: MAE = 115, MSE = 36,500, Train for each: MAE = 115, MSE = 36,500
@@ -79,7 +82,7 @@ def arima():
 
     print(f'Average Loss: {total_loss/test_sample_size}')
     print(f'Average Slope: {total_slope/test_sample_size}')
-    print_forecasts(input_data, actual, forecast, 'AutoARIMA')
+    print_nf_forecasts(input_data, actual, forecast, 'AutoARIMA')
 
 
 def test_error(forecast, forecast_col, actual):
@@ -94,9 +97,9 @@ def avg_actual_error(forecast, actual):
 def predict_test(nf, test, col_name=""):
     input_data, forecast, actual = None, None, None
     total_loss = np.array([0.0, 0.0])
-    count = 0
 
     start_idx = input_multiple_upper_bound * forecast_size
+    # start_idx = forecast_size
     final_idx = len(test) - forecast_size
 
     # Suppress PyTorch Lightning messages
@@ -106,10 +109,18 @@ def predict_test(nf, test, col_name=""):
     tqdm.disable = True
 
     np.random.seed(42)
-    #test_idxs = np.random.randint(start_idx, final_idx, test_sample_size)
-    for i in range(start_idx, final_idx):
-        input_data = test.iloc[i - input_multiple_upper_bound * forecast_size:i]
+    test_idxs = np.random.randint(start_idx, final_idx, test_sample_size)
+    # test_idxs = range(start_idx, final_idx)
+    results = {}
+    for i in tqdm(test_idxs):
+        #input_data = test.iloc[i - input_multiple_upper_bound * forecast_size:i]
+        input_data = test.iloc[i - forecast_size:i]
         forecast = nf.predict(input_data)
+
+        # Horizontal Line
+        # forecast = [input_data['y'].to_numpy()[-1]] * forecast_size
+        # forecast = pd.DataFrame({col_name: forecast})
+
         actual = test.iloc[i:i+forecast_size]
         # calculate L1 loss
         if len(forecast.columns) > 3:
@@ -117,10 +128,14 @@ def predict_test(nf, test, col_name=""):
         else:
             loss = test_error(forecast, col_name, actual)
         total_loss += loss
-        count += 1
-        # print(f'Loss: {loss}')
-        # print_forecasts(input_data, actual, forecast, col_name)
-    total_loss /= count
+
+        results[i] = list(forecast[col_name])
+        print_nf_forecasts(input_data, actual, forecast, col_name)
+        # print_np_forecasts(input_data, actual, forecast)
+    # result_df = pd.DataFrame(results).T
+    # result_df.to_csv(f'nf_results.csv')
+
+    total_loss /= len(test_idxs)
     print(f'Average Loss: {total_loss}')
     # print_forecasts(input_data, actual, forecast, col_name)
     return total_loss
@@ -135,10 +150,16 @@ def setup_and_train_nf_model(model_class):
 def train_nf_model(models, model_name=""):
     if not isinstance(models, list):
         models = [models]
-    nf = NeuralForecast(models=models, freq='5min')
     global df_prepared
     df_train, df_test = test_train_split(df_prepared, test_set_prop)
-    nf.fit(df_train)
+
+    if use_saved:
+        nf = NeuralForecast.load('trained_NHITS_model')
+        nf.save(f'trained_{model_name}_model', overwrite=True, save_dataset=True)
+    else:
+        nf = NeuralForecast(models=models, freq='5min')
+        nf.fit(df_train)
+
     return predict_test(nf, df_test, model_name)
 
 def load_model_from_yaml(yaml_path, model_class):
@@ -171,12 +192,12 @@ def predict_linear_regression(start_x, length, m, b):
 
 def linear_test(linear_func_predictor):
     losses = {}
-    for input_multiple in [.25, .5, 1, 2, 4, 8]:
+    for input_multiple in [1]:
         regression_input_size = int(input_multiple * forecast_size)
 
         final_idx = len(df_prepared) - forecast_size - regression_input_size
         np.random.seed(42)
-        test_idxs = np.random.randint(0, final_idx, 10*test_sample_size)
+        test_idxs = np.random.randint(0, final_idx, test_sample_size)
 
         total_loss = 0.0
         for i in test_idxs:
@@ -189,27 +210,20 @@ def linear_test(linear_func_predictor):
             actual = df_prepared.iloc[i + regression_input_size:i + regression_input_size + forecast_size]
             loss = test_error(forecast_df, 'Linear Regression', actual)
             total_loss += loss
-            print(f'Loss: {loss}')
-            # print_forecasts(input_data, actual, forecast, 'Linear Regression')
+            # print(f'Loss: {loss}')
+            print_np_forecasts(input_data, actual, forecast)
+            time.sleep(1e-1)
         avg_loss = total_loss / len(test_idxs)
         print(f'Average Loss for input multiple {input_multiple}: {avg_loss}')
         losses[input_multiple] = avg_loss
-    losses = sorted(losses.items(), key=lambda x: x[1])
-    print(f'Best input multiple: {losses[0][0]}, Loss: {losses[0][1]}')
+    # losses = sorted(losses.items(), key=lambda x: x[1])
+    # print(f'Best input multiple: {losses[0][0]}, Loss: {losses[0][1]}')
 
 
 # best w/ input multiple 8, MAE loss 0.77
 # best w/ input multiple 2, MSE loss 0.72
 def linear_regression_test():
     return linear_test(linear_func_predictor=predict_linear_regression)
-
-
-# NULL HYPOTHESIS TEST: If no trend is present, the best predictor is a horizontal line
-# MAE loss = 0.365, MSE loss = 0.31
-def horizontal_line_test():
-    def horizontal_line_predictor(y):
-        return 0, y[-1]
-    return linear_test(linear_func_predictor=horizontal_line_predictor)
 
 
 def get_scheduler(scheduler_type: str):
@@ -231,23 +245,23 @@ def get_scheduler(scheduler_type: str):
         }
     elif scheduler_type == 'ReduceLROnPlateau':
         raise Exception('ReduceLROnPlateau not supported')
-        return {
-            'lr_scheduler': {
-                'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau,
-                'monitor': 'val_loss',
-            },
-            'lr_scheduler_kwargs': {
-                'mode': 'min',
-                'factor': 0.1,
-                'patience': 10,
-                # 'threshold': 0.0001,
-                # 'threshold_mode': 'rel',
-                # 'cooldown': 0,
-                # 'min_lr': 0,
-                # 'eps': 1e-08,
-                # 'verbose': False
-            }
-        }
+        # return {
+        #     'lr_scheduler': {
+        #         'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau,
+        #         'monitor': 'val_loss',
+        #     },
+        #     'lr_scheduler_kwargs': {
+        #         'mode': 'min',
+        #         'factor': 0.1,
+        #         'patience': 10,
+        #         'threshold': 0.0001,
+        #         'threshold_mode': 'rel',
+        #         'cooldown': 0,
+        #         'min_lr': 0,
+        #         'eps': 1e-08,
+        #         'verbose': False
+        #     }
+        # }
     else:
         return {
             'lr_scheduler': None,
@@ -256,6 +270,8 @@ def get_scheduler(scheduler_type: str):
 
 def custom_nhits_params(scheduler_type='step', hidden_dim=512):
     # Define the parameters
+    loss = MAE()
+
     hparams = {
         'activation': 'ReLU',
         'alias': None,
@@ -266,11 +282,11 @@ def custom_nhits_params(scheduler_type='step', hidden_dim=512):
         'exclude_insample_y': False,
         'h': forecast_size,
         'inference_windows_batch_size': -1,
-        'input_size': 4 * forecast_size,
+        'input_size': forecast_size,
         'interpolation_mode': 'linear',
-        'learning_rate': 0.0006122658283000331,
-        'loss': MAE(),
-        'max_steps': 800.0,
+        'learning_rate': 0.006122658283000331,
+        'loss': loss,
+        'max_steps': 500.0,
         'mlp_units': [[hidden_dim] * 2] * 3,
         'n_blocks': [1, 1, 1],
         'n_freq_downsample': [24, 12, 1],
@@ -288,12 +304,12 @@ def custom_nhits_params(scheduler_type='step', hidden_dim=512):
         'step_size': 36,
         'val_check_steps': 100,
         'valid_batch_size': None,
-        'valid_loss': MAE(),
+        'valid_loss': loss,
         'windows_batch_size': 256
     }
     hparams.update(get_scheduler(scheduler_type))
     if scheduler_type == 'step':
-        hparams['lr_scheduler_kwargs']['step_size'] = 100
+        hparams['lr_scheduler_kwargs']['step_size'] = 20
     return hparams
 
 
@@ -386,13 +402,16 @@ def train_ensemble():
 # AutoLSTM: Need to try again
 # AutoDilatedRNN: ??
 
+# Horizontal: MAE = 0.22435, MSE = 0.09434
 
 # custom_nbeats()
 train_nf_model(NHITS(**custom_nhits_params()), 'NHITS')
+# train_nf_model(NBEATS(**custom_nbeats_params()), 'NBEATS')
 # train_ensemble()
 
 # models_to_try = [AutoFEDformer, AutoAutoformer, AutoInformer, AutoLSTM, AutoDilatedRNN]
 # results = {}
+# models_to_try = [AutoNBEATS]
 # for model in models_to_try:
 #     model_name = model.__name__
 #     result = setup_and_train_nf_model(model)
