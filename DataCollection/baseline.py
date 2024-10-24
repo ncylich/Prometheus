@@ -225,6 +225,9 @@ def linear_test(linear_func_predictor):
 def linear_regression_test():
     return linear_test(linear_func_predictor=predict_linear_regression)
 
+def horizontal_line_test():
+    return linear_test(linear_func_predictor=lambda y: (0, y[-1]))
+
 
 def get_scheduler(scheduler_type: str):
     if scheduler_type == 'step':
@@ -394,7 +397,7 @@ def train_ensemble():
 # train_nf_model(AutoNHITS)
 
 # linear_regression_test()
-# horizontal_line_test()
+horizontal_line_test()
 
 # AutoFEDformer: NAN???
 # AtuoAutoformer: ??
@@ -405,7 +408,7 @@ def train_ensemble():
 # Horizontal: MAE = 0.22435, MSE = 0.09434
 
 # custom_nbeats()
-train_nf_model(NHITS(**custom_nhits_params()), 'NHITS')
+# train_nf_model(NHITS(**custom_nhits_params()), 'NHITS')
 # train_nf_model(NBEATS(**custom_nbeats_params()), 'NBEATS')
 # train_ensemble()
 

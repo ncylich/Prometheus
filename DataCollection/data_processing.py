@@ -129,4 +129,5 @@ def test_train_split(df, test_size_ratio):
 
 if __name__ == "__main__":
     # df_prepared = read_parquet_nixtla("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3)
-    df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", expected_expiry_dist=3)
+    df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", expected_expiry_dist=-1)
+    print(df_prepared.head(1))

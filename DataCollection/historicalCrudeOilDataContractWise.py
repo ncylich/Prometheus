@@ -1,16 +1,19 @@
 import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta # pip install python-dateutil
+from concurrent.futures import ThreadPoolExecutor
 from calendar import monthrange
 import os
 from ib_insync import *
 
-todayDt = datetime.today()
+ticker = 'CL'  # CL - Crude Oil, HH - Natural Gas
+
+today_dt = datetime.today()
 # Input date in yyyymmdd format
-curMonth = todayDt.strftime("%Y%m")
+curMonth = today_dt.strftime("%Y%m")
 ib = IB()
 
-cDir = "./output/"
+cDir = f"./output_{ticker}/"
 
 
 def fetch_historical_data(month):
@@ -18,32 +21,30 @@ def fetch_historical_data(month):
     createFolder(cDir)
     #createFolder(cDir+"./output/cntrMonth=" + month+"")
     month_obj = datetime.strptime(month, "%Y%m")
-    dataMonths = []
+    data_months = []
     for i in range(1,5):
-        dataMonths.append((month_obj - relativedelta(months=+i)).strftime("%Y%m"))
-    dataMonths.reverse()  
+        data_months.append((month_obj - relativedelta(months=+i)).strftime("%Y%m"))
+    data_months.reverse()
 
-    for dataMonth in dataMonths:
-        dataMonthPath = cDir+"cntrMonth=" + month+"-day="
+    for dataMonth in data_months:
+        data_month_path = f"{cDir}-cntrMonth={month}-day="
+
         #createFolder(dataMonthPath)
-        for day in getDaysData(dataMonth):
-            dataDay = datetime.strptime(day, "%Y%m%d")
+        for day in get_days_data(dataMonth):
+            data_day = datetime.strptime(day, "%Y%m%d")
 
-            if dataDay.weekday() >= 5: # 5 and 6 correspond to Saturday and Sunday respectively
+            if data_day.weekday() >= 5: # 5 and 6 correspond to Saturday and Sunday respectively
                 continue
 
-
-            if (dataDay < todayDt - relativedelta(days=+1)):
-                downloadData(dataMonthPath, month, dataMonth, day)
+            if data_day < today_dt - relativedelta(days=+1):
+                downloadData(data_month_path, month, dataMonth, day)
 
 
 def createFolder(path):
     os.makedirs(path,exist_ok=True)
 
 def downloadData(path, month, dataMonth, day):
-    
-
-    contract = Future(symbol='CL', lastTradeDateOrContractMonth=month, exchange='NYMEX', includeExpired=True )
+    contract = Future(symbol=ticker, lastTradeDateOrContractMonth=month, exchange='NYMEX', includeExpired=True )  # Ommit "WOO" at end
 
     #dt = YYYYMMDD{SPACE}hh:mm:ss[{SPACE}TMZ]
     #startdt = dt.datetime(2023, 1, 15)
@@ -69,9 +70,6 @@ def downloadData(path, month, dataMonth, day):
     # Set the market data type to live data
     ib.reqMarketDataType(2)
 
-    
-
-
     try:
         bars = ib.reqHistoricalData(
             contract,
@@ -95,9 +93,7 @@ def downloadData(path, month, dataMonth, day):
         print(e)
 
 
-    
-
-def getDaysData(month):
+def get_days_data(month):
     # get all the days in a month
     month_obj = datetime.strptime(month, "%Y%m")
     days = []
@@ -105,18 +101,6 @@ def getDaysData(month):
         days.append(datetime(month_obj.year, month_obj.month, i).strftime("%Y%m%d"))
     return days
 
-        
-
-def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
-    """
-    Main function which takes optional parameters as month in yyyymm format,
-    number of months in history, number of months ahead.
-    """
-    months = get_months(month, num_of_hist_months, num_of_future_months)
-
-    
-    for month in months:
-        fetch_historical_data(month)
 
 
 def get_months(month, num_of_hist_months, num_of_future_months):
@@ -144,19 +128,30 @@ def get_months(month, num_of_hist_months, num_of_future_months):
        months.append(month_obj.strftime("%Y%m"))
 
     return months
+        
 
+def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
+    """
+    Main function which takes optional parameters as month in yyyymm format,
+    number of months in history, number of months ahead.
+    """
+    months = get_months(month, num_of_hist_months, num_of_future_months)
 
+    for month in months:
+        fetch_historical_data(month)
+
+    print("Data downloaded successfully")
 
 
 if __name__ == "__main__":
     import sys
     #main(*sys.argv[1:])
     parser = argparse.ArgumentParser(description="Batch Historical Downloader")
-    parser.add_argument("startMonth", type=str, default=curMonth, help="Input current date in yyyymm format.")
-    parser.add_argument("monthsBackInTime", type=int, default=38, help="How many months to go back.")
-    parser.add_argument("monthsAhead", type=int, default=2, help="How many months to go ahead.")
+    parser.add_argument("startMonth", type=str, default=curMonth, help="Input current date in yyyymm format.", nargs='?')
+    parser.add_argument("monthsBackInTime", type=int, default=38, help="How many months to go back.", nargs='?')
+    parser.add_argument("monthsAhead", type=int, default=4, help="How many months to go ahead.", nargs='?')
 
-   
+    start = datetime.now()
 
     ib.connect('127.0.0.1', 7497, clientId=0)
 
@@ -165,11 +160,6 @@ if __name__ == "__main__":
 
     ib.disconnect()
 
-
-
-
-
-
-
-
-
+    time_taken = datetime.now() - start
+    # print formatted time: mm:ss
+    print(f"Time taken: {time_taken.seconds//60}:{time_taken.seconds%60:02d}")

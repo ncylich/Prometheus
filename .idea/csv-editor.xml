@@ -10,6 +10,34 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/DataCollection/output/ticker=HH-cntrMonth=202405-day=20240101.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/DataCollection/output/ticker=HH-cntrMonth=202405-day=20240108.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/DataCollection/output_HH/-cntrMonth=202211-day=20220701.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/DataCollection/output_HH/-cntrMonth=202409-day=20240501.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>

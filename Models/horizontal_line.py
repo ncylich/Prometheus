@@ -22,9 +22,9 @@ Volume
 '''
 
 
-forecast_size = 72
+forecast_size = 36
 test_size_ratio = 0.2
-test_col = "volume"  # 'close' or 'volume'
+test_col = "close"  # 'close' or 'volume'
 
 device = torch.device("cpu")
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     plt.close('all')  # closing all previous plots
     model.eval()
     with torch.no_grad():
-        for x, y in test_loader:
+        for x, y, idx in test_loader:
             forecast = model(x).squeeze(0)
             # forecast = torch.zeros_like(y)  # create demo horizontal line forecast -> MAE = 0.253, MSE = 0.131
             x, forecast, y = interpolate_velocities(x, forecast, y)

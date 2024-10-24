@@ -23,15 +23,12 @@ def fetch_incremental_data(numDays):
     dataDays = []
     for i in range(0,numDays-1):
         dataDays.append((todayDt - relativedelta(days=+i)).strftime("%Y%m%d"))
-     
-
 
     for day in dataDays:
         dataDay = datetime.strptime(day, "%Y%m%d")
 
         if dataDay.weekday() >= 5: # 5 and 6 correspond to Saturday and Sunday respectively
             continue
-
 
         if (dataDay < todayDt - relativedelta(days=+1)):
             downloadData(cDir, curContrMonth, numDays, day)
@@ -42,8 +39,6 @@ def createFolder(path):
     os.makedirs(path,exist_ok=True)
 
 def downloadData(path, month, dataMonth, day):
-    
-
     contract = Future(symbol='CL', lastTradeDateOrContractMonth=month, exchange='NYMEX', includeExpired=True )
 
     #dt = YYYYMMDD{SPACE}hh:mm:ss[{SPACE}TMZ]
@@ -70,8 +65,6 @@ def downloadData(path, month, dataMonth, day):
     # Set the market data type to live data
     ib.reqMarketDataType(2)
 
-    
-
 
     try:
         bars = ib.reqHistoricalData(
@@ -96,22 +89,10 @@ def downloadData(path, month, dataMonth, day):
     except Exception as e:
         print("error in fetching data for " + day)
         print(e)
-
-
-    
-
-
-
         
 
 def main(numDays=1):
-
-        fetch_incremental_data(numDays)
-
-
-
-
-
+    fetch_incremental_data(numDays)
 
 
 if __name__ == "__main__":
@@ -120,7 +101,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Incremental Downloader")
     parser.add_argument("numDays", type=int, default=1, help="Last how many days to download.")
 
-   
 
     ib.connect('127.0.0.1', 7497, clientId=0)
 

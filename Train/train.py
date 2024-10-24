@@ -18,6 +18,7 @@ plt.close('all')
 class CrudeClosingPriceDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close'):
         self.data = data[predict_col].to_numpy()
+        self.time = data['date'].to_numpy()
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
 
@@ -27,13 +28,14 @@ class CrudeClosingPriceDataset(Dataset):
     def __getitem__(self, idx):
         x = self.data[idx:idx + self.backcast_size]
         y = self.data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]
-        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device)
+        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device), idx
 
 
 class CrudeClosingVelocityDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close'):
-        data = data[predict_col].to_numpy()
-        self.data = data[1:] - data[:-1]
+        predict_data = data[predict_col].to_numpy()
+        self.data = predict_data[1:] - predict_data[:-1]
+        self.time = data['date'].to_numpy()[1:]
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
 
@@ -44,7 +46,7 @@ class CrudeClosingVelocityDataset(Dataset):
     def __getitem__(self, idx):
         x = self.data[idx:idx + self.backcast_size]
         y = self.data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]
-        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device)
+        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device), idx
 
 
 class CrudeClosingAndVolumeDataset(Dataset):
@@ -64,7 +66,7 @@ class CrudeClosingAndVolumeDataset(Dataset):
         #                     self.volume_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]])
         y = np.concatenate([self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size],
                             self.volume_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]])
-        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device)
+        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device), idx
 
 
 class CrudeClosingAndVolumeVelocityDataset(Dataset):
@@ -86,7 +88,7 @@ class CrudeClosingAndVolumeVelocityDataset(Dataset):
         # y = np.concatenate([self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size],
         #                     self.volume_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]])
         y = self.price_data[idx + self.backcast_size:idx + self.backcast_size + self.forecast_size]
-        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device)
+        return torch.tensor(x, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.float32).to(device), idx
 
 
 
@@ -94,7 +96,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
     model.train()
     for epoch in tqdm(range(epochs)):
         epoch_loss = 0
-        for x, y in train_loader:
+        for x, y, idx in train_loader:
             optimizer.zero_grad()
             forecast = model(x)
             loss = criterion(forecast, y)
@@ -109,7 +111,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         plt.close('all')  # closing all previous plots
         model.eval()
         with torch.no_grad():
-            for x, y in test_loader:
+            for x, y, idx in test_loader:
                 forecast = model(x).squeeze(0)
                 # forecast = torch.zeros_like(y)  # create demo horizontal line forecast -> MAE = 0.253, MSE = 0.131
 
@@ -121,7 +123,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                     x, forecast, y = interpolate_velocities(x, forecast, y)
 
                 test_losses += mae_and_mse_loss(forecast, y)
-                plot_forecasts(x, y, forecast)
+                # plot_forecasts(x, y, forecast)
+                plot_time_forecasts(x, y, forecast, idx, test_loader.dataset)
         test_losses /= len(test_loader)
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
@@ -144,6 +147,19 @@ def plot_forecasts(input_data, actual, forecasts):
     plt.plot(input_x, input_data, label='Input')
 
     output_x = np.arange(len(input_data), len(input_data) + len(forecasts))
+    plt.plot(output_x, actual, label='Actual')
+    plt.plot(output_x, forecasts, label='Forecast', linestyle='--')
+
+    plt.legend()
+    plt.show()
+
+def plot_time_forecasts(input_data, actual, forecasts, idxs, dataset):
+    input_data, actual, forecasts = input_data[0, :].cpu().numpy(), actual[0, :].cpu().numpy(), forecasts[0, :].cpu().numpy()
+    idx = idxs[0].item()
+    input_x = dataset.time[idx:idx + len(input_data)]
+    output_x = dataset.time[idx + len(input_data):idx + len(input_data) + len(forecasts)]
+
+    # plt.plot(input_x, input_data, label='Input')
     plt.plot(output_x, actual, label='Actual')
     plt.plot(output_x, forecasts, label='Forecast', linestyle='--')
 
