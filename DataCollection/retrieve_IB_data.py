@@ -1,13 +1,12 @@
 import argparse
 from datetime import datetime
-from dateutil.relativedelta import relativedelta # pip install python-dateutil
+from dateutil.relativedelta import relativedelta  # pip install python-dateutil
 from concurrent.futures import ThreadPoolExecutor
 from calendar import monthrange
 import os
 from ib_insync import *
 import glob
 import pandas as pd
-
 
 # Base, example, not used
 ticker = 'CL'
@@ -22,23 +21,23 @@ cDir = f"./output_{ticker}/"
 
 
 def fetch_historical_data(month):
-    #get last 4 months data for each month
+    # get last 4 months data for each month
     createFolder(cDir)
-    #createFolder(cDir+"./output/cntrMonth=" + month+"")
+    # createFolder(cDir+"./output/cntrMonth=" + month+"")
     month_obj = datetime.strptime(month, "%Y%m")
     data_months = []
-    for i in range(1,5):
+    for i in range(1, 5):
         data_months.append((month_obj - relativedelta(months=+i)).strftime("%Y%m"))
     data_months.reverse()
 
     for dataMonth in data_months:
         data_month_path = f"{cDir}-cntrMonth={month}-day="
 
-        #createFolder(dataMonthPath)
+        # createFolder(dataMonthPath)
         for day in get_days_data(dataMonth):
             data_day = datetime.strptime(day, "%Y%m%d")
 
-            if data_day.weekday() >= 5: # 5 and 6 correspond to Saturday and Sunday respectively
+            if data_day.weekday() >= 5:  # 5 and 6 correspond to Saturday and Sunday respectively
                 continue
 
             if data_day < today_dt - relativedelta(days=+1):
@@ -46,14 +45,15 @@ def fetch_historical_data(month):
 
 
 def createFolder(path):
-    os.makedirs(path,exist_ok=True)
+    os.makedirs(path, exist_ok=True)
+
 
 def downloadData(path, month, dataMonth, day):
-    contract = Future(symbol=ticker, lastTradeDateOrContractMonth=month, exchange=exchange, includeExpired=True )  # Ommit "WOO" at end
+    # Might have to include "currency='USD'" kwarg
+    contract = Future(symbol=ticker, lastTradeDateOrContractMonth=month, exchange=exchange, includeExpired=True)  # Ommit "WOO" at end
 
-    #dt = YYYYMMDD{SPACE}hh:mm:ss[{SPACE}TMZ]
-    #startdt = dt.datetime(2023, 1, 15)
-
+    # dt = YYYYMMDD{SPACE}hh:mm:ss[{SPACE}TMZ]
+    # startdt = dt.datetime(2023, 1, 15)
 
     # comtract:         a qualified contract not just a ticker
     # endDateTime:      the start of the loop as it starts with current and goes back through time.
@@ -67,8 +67,7 @@ def downloadData(path, month, dataMonth, day):
     # useRTH            True or False, show Regular Trading Hours
     # formatDate:       set to 1, but not sure what it does...
 
-
-    #edt = '20000101 00:00:01'
+    # edt = '20000101 00:00:01'
     edt = day + ' 23:00:00'
 
     barsList = []
@@ -84,7 +83,7 @@ def downloadData(path, month, dataMonth, day):
             whatToShow='TRADES',
             useRTH=True,
             formatDate=1)
-        
+
         barsList.append(bars)
 
         # save to CSV file
@@ -105,7 +104,6 @@ def get_days_data(month):
     for i in range(1, monthrange(month_obj.year, month_obj.month)[1] + 1):
         days.append(datetime(month_obj.year, month_obj.month, i).strftime("%Y%m%d"))
     return days
-
 
 
 def get_months(month, num_of_hist_months, num_of_future_months):
@@ -129,11 +127,11 @@ def get_months(month, num_of_hist_months, num_of_future_months):
 
     # Subtract months from now to past
     for i in range(1, num_of_hist_months + num_of_future_months):
-       month_obj = month_obj - relativedelta(months=1)
-       months.append(month_obj.strftime("%Y%m"))
+        month_obj = month_obj - relativedelta(months=1)
+        months.append(month_obj.strftime("%Y%m"))
 
     return months
-        
+
 
 def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
     """
@@ -164,16 +162,18 @@ def convert_csv_to_parquet(input_folder, output_file):
     df = pd.concat(df_list)
 
     df.set_index('expiry', inplace=True)
-    #df.set_index('dataMonth', inplace=True)
+    # df.set_index('dataMonth', inplace=True)
 
     df.to_parquet(output_file, compression='snappy', index=True)
 
 
 if __name__ == "__main__":
     import sys
-    #main(*sys.argv[1:])
+
+    # main(*sys.argv[1:])
     parser = argparse.ArgumentParser(description="Batch Historical Downloader")
-    parser.add_argument("startMonth", type=str, default=curMonth, help="Input current date in yyyymm format.", nargs='?')
+    parser.add_argument("startMonth", type=str, default=curMonth, help="Input current date in yyyymm format.",
+                        nargs='?')
     parser.add_argument("monthsBackInTime", type=int, default=38, help="How many months to go back.", nargs='?')
     parser.add_argument("monthsAhead", type=int, default=4, help="How many months to go ahead.", nargs='?')
 
@@ -183,13 +183,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # GC - Gold, CL - Crude Oil, NG - Natural Gas, ES - E-mini S&P 500, HG - Copper, SI - Silver
+    # GC - Gold, CL - Crude Oil, NG - Natural Gas, ES - E-mini S&P 500, ZN - 10-Year T-Note, DX - US Dollar Index, HG - Copper, SI - Silver
     stock_list = [['GC', 'COMEX'],
                   ['CL', 'NYMEX'],
                   ['NG', 'NYMEX'],
                   ['ES', 'CME'],
-                  ['HG', 'COMEX'],
-                  ['SI', 'COMEX']]
+                  ['ZN', 'CBOT'],
+                  ['DX', 'NYBOT'],
+                  ['HG', 'COMEX'],]
+                  # ['SI', 'COMEX']]  # SILVER not working
 
     for stock in stock_list:
         curr_start = datetime.now()
@@ -204,10 +206,10 @@ if __name__ == "__main__":
 
         time_taken = datetime.now() - curr_start
         # print formatted time: mm:ss
-        print(f"Time taken for {ticker}: {time_taken.seconds//60}:{time_taken.seconds%60:02d}")
+        print(f"Time taken for {ticker}: {time_taken.seconds // 60}:{time_taken.seconds % 60:02d}")
 
     ib.disconnect()
 
     time_taken = datetime.now() - start
     # print formatted time: mm:ss
-    print(f"Total time taken: {time_taken.seconds//60}:{time_taken.seconds%60:02d}")
+    print(f"Total time taken: {time_taken.seconds // 60}:{time_taken.seconds % 60:02d}")
