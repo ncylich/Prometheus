@@ -17,7 +17,7 @@ today_dt = datetime.today()
 curMonth = today_dt.strftime("%Y%m")
 ib = IB()
 
-cDir = f"./output_{ticker}/"
+cDir = f"./IB_Raw_Data/output_{ticker}/"
 
 
 def fetch_historical_data(month):
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
         ticker, exchange = stock
         today = today_dt.strftime('%Y%m%d')
-        cDir = f"./{today}_output_{ticker}/"
+        cDir = f"./IB_Raw_data/{today}_output_{ticker}/"
         parquet = f"./{today}_output_{ticker}.parquet"
 
         main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
