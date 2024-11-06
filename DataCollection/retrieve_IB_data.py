@@ -198,8 +198,8 @@ if __name__ == "__main__":
 
         ticker, exchange = stock
         today = today_dt.strftime('%Y%m%d')
-        cDir = f"./IB_Raw_data/{today}_output_{ticker}/"
-        parquet = f"./{today}_output_{ticker}.parquet"
+        cDir = f"./IB_Raw_Data/{today}_output_{ticker}/"
+        parquet = f"./IB_Parquet_Data/{today}_output_{ticker}.parquet"
 
         main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
         convert_csv_to_parquet(cDir, parquet)

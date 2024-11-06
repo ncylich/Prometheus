@@ -10,8 +10,8 @@ def retrieve_files(date):
     """
     Retrieve all parquet files for a given date
     """
-    files = glob.glob(f"{date}_output_*.parquet")
-    cl_idx = files.index(f"{date}_output_CL.parquet")  # making CL first
+    files = glob.glob(f"IB_Parquet_Data/{date}_output_*.parquet")
+    cl_idx = files.index(f"IB_Parquet_Data/{date}_output_CL.parquet")  # making CL first
     files = [files[cl_idx]] + files[:cl_idx] + files[cl_idx + 1:]
     return files
 
