@@ -5,3 +5,4 @@ DataCollection/output/*
 */__pycache__/*
 */.vscode/*
 */test.py
+DataCollection/IB_Raw_Data/*
