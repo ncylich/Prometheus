@@ -11,6 +11,8 @@ def retrieve_files(date):
     Retrieve all parquet files for a given date
     """
     files = glob.glob(f"{date}_output_*.parquet")
+    cl_idx = files.index(f"{date}_output_CL.parquet")  # making CL first
+    files = [files[cl_idx]] + files[:cl_idx] + files[cl_idx + 1:]
     return files
 
 
@@ -60,6 +62,7 @@ def get_updated_dfs(files):
 def main():
     files = retrieve_files(DATE)
     dfs = get_updated_dfs(files)
+
     merged_df = dfs[0]
     for df in dfs[1:]:
         merged_df = merged_df.merge(df, on='expiry_and_date', how='inner')
@@ -76,10 +79,17 @@ def main():
     merged_df['date'] = pd.to_datetime(merged_df['date'], utc=True)
     merged_df['date'] = merged_df['date'].dt.tz_convert('America/New_York')
 
-    merged_df = merged_df.sort_values(by=['date', 'expiry'])
-    merged_df.reset_index(drop=True, inplace=True)
+    # making date and expiry first and second columns
+    cols = merged_df.columns.tolist()
+    cols = cols[0:1] + cols[-2:] + cols[1:-2]
+    merged_df = merged_df[cols]
 
-    merged_df.to_csv(f"{DATE}_merged.csv", index=False)
+    merged_df = merged_df.sort_values(by=['date', 'expiry'])
+
+    merged_df.reset_index(inplace=True)
+    merged_df.drop(columns=['level_0', 'index'], inplace=True)
+
+    merged_df.to_csv(f"{DATE}_merged.csv", index=True)
 
 if __name__ == '__main__':
     main()
