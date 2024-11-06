@@ -79,10 +79,44 @@ class FeatureTimePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
+class TriplePositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        self.device = device
+        self.feature_types = feature_types
+
+        # Embeddings for feature types (e.g., price and volume)
+        self.feature_type_encoding = nn.Embedding(feature_types, d_model // 3).to(device)
+        # Embeddings for time steps (e.g., hours of the day)
+        self.time_encoding = nn.Embedding(max_time_steps, d_model // 3).to(device)
+        # Embeddings for tickers
+        self.ticker_encoding = nn.Embedding(n_tickers, d_model // 3).to(device)
+
+    def forward(self, x: torch.Tensor, time_indices: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor of shape [seq_len, batch_size, d_model]
+            time_indices: Tensor of shape [batch_size], indices of time steps
+        """
+        num_features, batch_size, d_model = x.size()
+        n_tickers = num_features // self.feature_types
+        third = x.size(2) // 3
+
+        # Add feature type encoding
+        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types)).repeat_interleave(n_tickers, axis=0).to(self.device).unsqueeze(1)
+
+        # Add time encoding
+        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices).to(self.device).unsqueeze(0)
+
+        # Add ticker encoding
+        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers)).repeat(self.feature_types, 1).to(self.device).unsqueeze(1)
+
+        return self.dropout(x)
 
 class SoMoFormerStock(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
-                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, max_time_steps=24, dct_n=108):
+                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
         super(SoMoFormerStock, self).__init__()
 
         self.seq_len = seq_len
@@ -100,9 +134,10 @@ class SoMoFormerStock(nn.Module):
         self.fc_out = nn.Linear(nhid, dct_n)
 
         # Positional Encoding
-        self.positional_encoding = FeatureTimePositionalEncoding(
+        self.positional_encoding = TriplePositionalEncoding(
             d_model=nhid,
             feature_types=feature_types,
+            n_tickers=n_tickers,
             max_time_steps=max_time_steps,
             dropout=dropout,
             device=device
@@ -184,7 +219,6 @@ if __name__ == '__main__':
                             forecast_size,
                             nhid=nhid,
                             nhead=nhead,
-                            feature_types=14,
                             dim_feedfwd=dim_feedfwd,
                             nlayers=nlayers,
                             dropout=dropout,

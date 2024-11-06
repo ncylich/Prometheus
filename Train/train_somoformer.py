@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
+import pandas as pd
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -79,15 +80,17 @@ class CrudeClosingAndVolumeDataset(Dataset):
 
 
 class MultiStockClosingAndVolumeDataset(Dataset):
-    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None, mean_std_path=None):
+    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
         if tickers is None:
             tickers = ['CL', 'GC', 'NG', 'ES', 'ZN', 'DX', 'HG']
 
-        self.prices = {ticker: self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
+        data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
+
+        self.tickers = tickers
+        self.velocities = {ticker: self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
         self.volumes = {ticker: torch.from_numpy(data[ticker + '_volume'].to_numpy()).float() / 1e3 for ticker in tickers}
-        self.price_data = torch.from_numpy(data[predict_col].to_numpy()).float()
-        self.volume_data = torch.from_numpy(data['volume'].to_numpy()).float() / 1e3  # DOWN-SCALING
+        self.price_data = torch.from_numpy(data['CL_' + predict_col].to_numpy()).float()
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
         self.times = torch.tensor(data['date'].dt.hour.values)
@@ -100,9 +103,10 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         x_volumes = []
         y_prices = []
         y_volumes = []
+        CL_price_seq = self.price_data[idx: idx + self.backcast_size + self.forecast_size]
 
-        for ticker in self.prices.keys():
-            price_seq = self.prices[ticker][idx: idx + self.backcast_size + self.forecast_size]
+        for ticker in self.tickers:
+            price_seq = self.velocities[ticker][idx: idx + self.backcast_size + self.forecast_size]
             volume_seq = self.volumes[ticker][idx: idx + self.backcast_size + self.forecast_size]
 
             x_price = price_seq[:self.backcast_size]
@@ -115,13 +119,12 @@ class MultiStockClosingAndVolumeDataset(Dataset):
             y_prices.append(y_price)
             y_volumes.append(y_volume)
 
-        x = torch.stack([torch.stack(x_prices), torch.stack(x_volumes)])  # Shape: [2, num_tickers, backcast_size]
-        y = torch.stack(
-            [torch.stack(y_prices), torch.stack(y_volumes)])  # Shape: [2, num_tickers, backcast_size + forecast_size]
+        x = torch.stack(x_prices + x_volumes)  # Shape: [2, num_tickers, backcast_size]
+        y = torch.stack(y_prices + y_volumes)  # Shape: [2, num_tickers, backcast_size + forecast_size]
 
         time = self.times[idx + self.backcast_size]
 
-        return x.to(device), y.to(device), time.to(device), price_seq.to(device)
+        return x.to(device), y.to(device), time.to(device), CL_price_seq.to(device)
     def calculate_velocity(self, data):
         velocity = data[1:] - data[:-1]
         return torch.cat([velocity[0].unsqueeze(0), velocity])
@@ -202,17 +205,16 @@ def mae_and_mse_loss(forecast, actual):
 
 
 def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
-                     dataset_path='../DataCollection/aug16-2024-2yrs.parquet', dataset_col='close'):
-    data = read_processed_parquet(dataset_path)
+                     dataset_path='../DataCollection/20241030_merged_squeezed.csv', dataset_col='close'):
+    data = pd.read_csv(dataset_path)
+    data = data[data['expiry-dist'] == 3].copy()  # Only considering 3-month futures
     train_data, test_data = test_train_split(data, test_size_ratio)
 
     mean_std_path = 'mean_std.pth'  # Path to save/load mean and std
 
-    CrudeDataset = CrudeClosingAndVolumeDataset
-    train_dataset = CrudeDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col,
-                                 mean_std_path=mean_std_path)
-    test_dataset = CrudeDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col,
-                                mean_std_path=mean_std_path)
+    CrudeDataset = MultiStockClosingAndVolumeDataset
+    train_dataset = CrudeDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col)
+    test_dataset = CrudeDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col)
     data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=1024)
     return data_dataloader, test_dataloader
