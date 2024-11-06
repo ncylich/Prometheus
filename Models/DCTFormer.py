@@ -184,6 +184,7 @@ if __name__ == '__main__':
                             forecast_size,
                             nhid=nhid,
                             nhead=nhead,
+                            feature_types=14,
                             dim_feedfwd=dim_feedfwd,
                             nlayers=nlayers,
                             dropout=dropout,

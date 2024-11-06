@@ -78,6 +78,54 @@ class CrudeClosingAndVolumeDataset(Dataset):
         return x.to(device), y.to(device), time.to(device), price_seq.to(device)
 
 
+class MultiStockClosingAndVolumeDataset(Dataset):
+    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None, mean_std_path=None):
+        # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
+        if tickers is None:
+            tickers = ['CL', 'GC', 'NG', 'ES', 'ZN', 'DX', 'HG']
+
+        self.prices = {ticker: self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
+        self.volumes = {ticker: torch.from_numpy(data[ticker + '_volume'].to_numpy()).float() / 1e3 for ticker in tickers}
+        self.price_data = torch.from_numpy(data[predict_col].to_numpy()).float()
+        self.volume_data = torch.from_numpy(data['volume'].to_numpy()).float() / 1e3  # DOWN-SCALING
+        self.backcast_size = backcast_size
+        self.forecast_size = forecast_size
+        self.times = torch.tensor(data['date'].dt.hour.values)
+
+    def __len__(self):
+        return len(self.price_data) - self.backcast_size - self.forecast_size
+
+    def __getitem__(self, idx):
+        x_prices = []
+        x_volumes = []
+        y_prices = []
+        y_volumes = []
+
+        for ticker in self.prices.keys():
+            price_seq = self.prices[ticker][idx: idx + self.backcast_size + self.forecast_size]
+            volume_seq = self.volumes[ticker][idx: idx + self.backcast_size + self.forecast_size]
+
+            x_price = price_seq[:self.backcast_size]
+            x_volume = volume_seq[:self.backcast_size]
+            y_price = price_seq
+            y_volume = volume_seq
+
+            x_prices.append(x_price)
+            x_volumes.append(x_volume)
+            y_prices.append(y_price)
+            y_volumes.append(y_volume)
+
+        x = torch.stack([torch.stack(x_prices), torch.stack(x_volumes)])  # Shape: [2, num_tickers, backcast_size]
+        y = torch.stack(
+            [torch.stack(y_prices), torch.stack(y_volumes)])  # Shape: [2, num_tickers, backcast_size + forecast_size]
+
+        time = self.times[idx + self.backcast_size]
+
+        return x.to(device), y.to(device), time.to(device), price_seq.to(device)
+    def calculate_velocity(self, data):
+        velocity = data[1:] - data[:-1]
+        return torch.cat([velocity[0].unsqueeze(0), velocity])
+
 def plot_forecast_vs_actual(forecast, actual, gt_seq):
     plt.figure(figsize=(12, 6))
     plt.plot(forecast, label='Forecast')
