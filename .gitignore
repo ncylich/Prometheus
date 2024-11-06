@@ -1,3 +1,7 @@
 .idea/*
-.DS_Store/*
+.DS_Store
+*/.DS_Store/*
 DataCollection/output/*
+*/__pycache__/*
+*/.vscode/*
+*/test.py
