@@ -28,10 +28,11 @@ forecast_size = 36
 backcast_size = forecast_size * 2
 
 seq_len = backcast_size + forecast_size
-nhid = 128
+factor = 1
+nhid = 128 * factor
 nhead = 8
-dim_feedfwd = 512
-nlayers = 5
+dim_feedfwd = 512 * factor
+nlayers = 12
 dropout = 0.1
 batch_size = 1024
 test_col = 'close'
@@ -39,7 +40,7 @@ test_col = 'close'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 lr = 2e-4
-epochs = 15
+epochs = 100
 init_weight_magnitude = 1e-3
 
 def get_dct_matrix(N):
@@ -245,7 +246,7 @@ def main():
         aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
         dct_true = model.dct_forward(y_true)
-        return F.mse_loss(y_pred, dct_true) + 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, dct_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
