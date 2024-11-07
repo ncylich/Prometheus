@@ -211,7 +211,7 @@ class SoMoFormerStock(nn.Module):
 
         return out
 
-if __name__ == '__main__':
+def main():
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
                                                 batch_size=batch_size, dataset_col=test_col)
 
@@ -236,3 +236,7 @@ if __name__ == '__main__':
         return F.mse_loss(y_pred, dct_true) # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
+
+
+if __name__ == '__main__':
+    main()
