@@ -145,7 +145,7 @@ class DCTFormer(nn.Module):
             max_time_steps=max_time_steps,
             dropout=dropout,
             device=device
-        )
+        ).to(device)
 
         # Transformer Encoder
         encoder_layer = nn.TransformerEncoderLayer(d_model=nhid,
