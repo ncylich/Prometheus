@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 2
+factor = 8
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
@@ -87,8 +87,8 @@ def init_weights(m):
         # init.zeros_(m.weight)  # Zeros
         init.normal_(m.weight, mean=0, std=init_weight_magnitude)
         if m.bias is not None:
-            # init.zeros_(m.bias)
-            init.normal_(m.bias, mean=0, std=init_weight_magnitude)
+            init.zeros_(m.bias)
+            # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
     elif isinstance(m, nn.Embedding):
         init.normal_(m.weight, mean=0, std=init_weight_magnitude)
 
@@ -188,7 +188,7 @@ def main(lr=lr1, w1=0.5, w2=0.5):
                        device=device).to(device)
 
     optimizer = AdamW(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=2)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
 
     def loss_function(y_pred, y_true):
         # y_true: [batch_size, V, F]
