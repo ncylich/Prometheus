@@ -216,7 +216,7 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
     prometheus_idx = -1
     try:
         prometheus_idx = path_dirs.index('Prometheus')
-    except ValueError:
+    except:
         pass
     dataset_path = '../' * (prometheus_idx + 1) + dataset_path
 
