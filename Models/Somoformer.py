@@ -23,11 +23,12 @@ import torch.nn.functional as F
 forecast_size = 36
 backcast_size = forecast_size * 2
 
+factor = 1
 seq_len = backcast_size + forecast_size
-nhid = 128
+nhid = 128 * factor
 nhead = 8
-dim_feedfwd = 512
-nlayers = 5
+dim_feedfwd = 512 * factor
+nlayers = 12
 dropout = 0.1
 batch_size = 1024
 test_col = 'close'
@@ -35,7 +36,7 @@ test_col = 'close'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 lr = 2e-4
-epochs = 15
+epochs = 100
 init_weight_magnitude = 1e-3
 
 class TriplePositionalEncoding(nn.Module):
@@ -63,13 +64,13 @@ class TriplePositionalEncoding(nn.Module):
         third = x.size(2) // 3
 
         # Add feature type encoding
-        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types)).repeat_interleave(n_tickers, axis=0).to(self.device).unsqueeze(1)
+        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types, device=self.device)).repeat_interleave(n_tickers, axis=0).unsqueeze(1)
 
         # Add time encoding
-        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices).to(self.device).unsqueeze(0)
+        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices.to(self.device)).unsqueeze(0)
 
         # Add ticker encoding
-        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers)).repeat(self.feature_types, 1).to(self.device).unsqueeze(1)
+        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers, device=self.device)).repeat(self.feature_types, 1).unsqueeze(1)
 
         return self.dropout(x)
 

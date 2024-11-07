@@ -27,8 +27,8 @@ import torch.nn.functional as F
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-seq_len = backcast_size + forecast_size
 factor = 1
+seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
 dim_feedfwd = 512 * factor
