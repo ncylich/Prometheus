@@ -205,7 +205,12 @@ def mae_and_mse_loss(forecast, actual):
 
 
 def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
-                     dataset_path='../DataCollection/20241030_merged_squeezed.csv', dataset_col='close'):
+                     dataset_path='/DataCollection/20241030_merged_squeezed.csv', dataset_col='close'):
+    if os.getcwd().split('/')[-2] == 'Prometheus':
+        dataset_path = '..' + dataset_path
+    else:
+        dataset_path = 'Prometheus' + dataset_path
+
     data = pd.read_csv(dataset_path)
     data = data[data['expiry-dist'] == 3].copy()  # Only considering 3-month futures
     train_data, test_data = test_train_split(data, test_size_ratio)
