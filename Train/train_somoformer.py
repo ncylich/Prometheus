@@ -145,9 +145,9 @@ def plot_forecast_vs_actual(forecast, actual):
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
     model.to(device)
-    model.train()
 
     for epoch in tqdm(range(epochs)):
+        model.train()
         epoch_loss = 0
         for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
