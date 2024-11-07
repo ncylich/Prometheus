@@ -1,4 +1,8 @@
-from DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+if __name__ == '__main__':
+    from DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+else:
+    from Prometheus.DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+
 import numpy as np
 from time import sleep
 import torch
