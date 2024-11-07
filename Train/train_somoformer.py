@@ -189,7 +189,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
                 forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
 
-                plot_forecast_vs_actual(forecast[0], y[0], gt_seq[0])
+                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu(), gt_seq[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
                 sign_truth = torch.sign(y[:, -1] - y[:, x.size()[-1]])
