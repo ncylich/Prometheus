@@ -166,8 +166,8 @@ class Somoformer(nn.Module):
         # Transpose to [batch_size, V, seq_len]
         out = out.permute(1, 0, 2)  # [batch_size, V, seq_len]
 
-        # Post-process correction
-        out = Somoformer.fix_mean_offset(x, out)
+        # Post-process correction - artificially, makes better, but not good enough
+        # out = Somoformer.fix_mean_offset(x, out)
 
         return out
 
