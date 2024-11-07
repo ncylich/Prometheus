@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 4
+factor = 2
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
@@ -184,7 +184,7 @@ def main():
         #Zero_sum = torch.zeros_like(full_sum)
 
         # squared difference in sigmoid
-        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        diff_aux_loss = F.l1_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
         #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
