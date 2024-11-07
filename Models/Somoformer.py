@@ -120,7 +120,7 @@ class Somoformer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
-        self.apply(init_weights)
+        #self.apply(init_weights)
 
     def post_process(self, x):
         return x
