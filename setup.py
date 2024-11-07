@@ -20,7 +20,7 @@ setup(
     author='Noah Cylich',
     author_email='noahcylich@gmail.com',
     description='Prometheus Quant Research',
-    long_description=open('README.md').read(),
+    long_description='proprietary',
     long_description_content_type='text/markdown',
     url='https://github.com/ncylich/Prometheus',
     classifiers=[
