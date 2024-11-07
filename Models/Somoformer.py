@@ -220,5 +220,6 @@ def main(lr=lr1, w1=0.5, w2=0.5):
 
 
 if __name__ == '__main__':
-    main(lr2, 1, 0)
+    main(lr1, 1, 0)
+    # main(lr1, 0.5, 0.5)
     # main(lr2)
