@@ -135,7 +135,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         return data[1:] - data[:-1]
 
 def plot_forecast_vs_actual(forecast, actual):
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(9, 6))
     plt.plot(forecast, label='Forecast')
     plt.plot(actual, label='Actual')
     # plt.plot(gt_seq, label='Ground Truth')
@@ -183,7 +183,9 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 # plot_forecast_vs_actual(forecast[0], y[0])
                 forecast = forecast[:, 0].squeeze(1)
                 y = y[:, 0].squeeze(1)
-                # torch.cumsum(forecast, dim=-1, out=forecast)
+                # plot_forecast_vs_actual(output[0][0].cpu(), y[0].cpu())
+
+                torch.cumsum(forecast, dim=-1, out=forecast)
                 torch.cumsum(y, dim=-1, out=y)
                 # print(forecast.shape, y.shape, gt_seq[:, 0].shape)
                 forecast += gt_seq[:, 0].unsqueeze(1)

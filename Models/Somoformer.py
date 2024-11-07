@@ -1,6 +1,10 @@
 from torchvision.ops.misc import interpolate
+import sys
+if 'google.colab' in sys.modules:
+    from Prometheus.Train.train_somoformer import train_model, get_data_loaders
+else:
+    from Train.train_somoformer import train_model, get_data_loaders
 
-from Train.train_somoformer import train_model, get_data_loaders
 from enum import Enum
 import torch
 from torch import nn
@@ -14,6 +18,7 @@ from torch import nn
 import numpy as np
 import math
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 # import torch_dct as dct
 # from utils.dct import get_dct_matrix
 
@@ -165,6 +170,13 @@ def main():
 
         # squared difference in sigmoid
         aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+
+        # plt.figure(figsize=(9, 6))
+        # plt.plot(y_pred[0][0].clone().detach().cpu(), label='Forecast')
+        # plt.plot(y_true[0][0].clone().detach().cpu(), label='Actual')
+        # # plt.plot(gt_seq, label='Ground Truth')
+        # plt.legend()
+        # plt.show()
 
         return F.mse_loss(y_pred, y_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
