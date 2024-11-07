@@ -137,7 +137,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
     def calculate_velocity(self, data):
         return data[1:] - data[:-1]
 
-def plot_forecast_vs_actual(forecast, actual, gt_seq):
+def plot_forecast_vs_actual(forecast, actual):
     plt.figure(figsize=(9, 6))
     plt.plot(forecast, label='Forecast')
     plt.plot(actual, label='Actual')

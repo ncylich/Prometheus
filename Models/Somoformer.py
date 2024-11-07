@@ -129,9 +129,12 @@ class Somoformer(nn.Module):
     @staticmethod
     def fix_mean_offset(x, out):
         input_size = x.size(-1)
+        output_size = out.size(-1)
         x_means = x.mean(dim=-1, keepdim=True)
+        x_means = x_means.permute(1, 0, 2)
         out_input_means = out[..., :input_size].mean(dim=-1, keepdim=True)
         delta_means = x_means - out_input_means
+        delta_means = delta_means.repeat(1, 1, output_size)
         out = out + delta_means
         return out
 
