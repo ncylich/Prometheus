@@ -162,7 +162,10 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         with torch.no_grad():
             for x, y, t, gt_seq in test_loader:
                 output = model(x, t)
-                forecast = model.dct_backward(output) # [batch_size, V, seq_len]
+                try:
+                    forecast = model.dct_backward(output) # [batch_size, V, seq_len]
+                except AttributeError:
+                    forecast = output
                 # halving values to only consider price data (if applicable)
                 # print(y.shape)
                 # plot_forecast_vs_actual(forecast[0], y[0])

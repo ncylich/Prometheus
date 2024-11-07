@@ -38,47 +38,6 @@ lr = 2e-4
 epochs = 15
 init_weight_magnitude = 1e-3
 
-def get_dct_matrix(N):
-    """Calculates DCT Matrix of size N."""
-    dct_m = np.eye(N)
-    for k in np.arange(N):
-        for i in np.arange(N):
-            w = np.sqrt(2 / N)
-            if k == 0:
-                w = np.sqrt(1 / N)
-            dct_m[k, i] = w * np.cos(np.pi * (i + 1 / 2) * k / N)
-    idct_m = np.linalg.inv(dct_m)
-    return dct_m, idct_m
-
-
-class FeatureTimePositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, feature_types: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        self.device = device
-
-        # Embeddings for feature types (e.g., price and volume)
-        self.feature_type_encoding = nn.Embedding(feature_types, d_model // 2).to(device)
-        # Embeddings for time steps (e.g., hours of the day)
-        self.time_encoding = nn.Embedding(max_time_steps, d_model // 2).to(device)
-
-    def forward(self, x: torch.Tensor, time_indices: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Tensor of shape [seq_len, batch_size, d_model]
-            time_indices: Tensor of shape [batch_size], indices of time steps
-        """
-        num_features, batch_size, d_model = x.size()
-        half = x.size(2) // 2
-
-        # Add feature type encoding
-        x[:, :, 0:half*2:2] = x[:, :, 0:half*2:2] + self.feature_type_encoding(torch.arange(num_features)).to(self.device).unsqueeze(1)
-
-        # Add time encoding
-        x[:, :, 1:half*2:2] = x[:, :, 1:half*2:2] + self.time_encoding(time_indices).to(self.device).unsqueeze(0)
-
-        return self.dropout(x)
-
 class TriplePositionalEncoding(nn.Module):
     def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
         super().__init__()
@@ -114,24 +73,18 @@ class TriplePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
-class DCTFormer(nn.Module):
+class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
-                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
-        super(DCTFormer, self).__init__()
+                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
+        super(Somoformer, self).__init__()
 
         self.seq_len = seq_len
         self.forecast_size = forecast_size
         self.device = device
-        self.dct_n = dct_n
-
-        # DCT matrices
-        dct_m, idct_m = get_dct_matrix(seq_len)
-        self.dct = torch.from_numpy(dct_m[:dct_n]).float().to(device)  # [dct_n, seq_len]
-        self.idct = torch.from_numpy(idct_m[:, :dct_n]).float().to(device)  # [seq_len, dct_n]
 
         # Input and output layers
-        self.fc_in = nn.Linear(dct_n, nhid)
-        self.fc_out = nn.Linear(nhid, dct_n)
+        self.fc_in = nn.Linear(seq_len, nhid)
+        self.fc_out = nn.Linear(nhid, seq_len)
 
         # Positional Encoding
         self.positional_encoding = TriplePositionalEncoding(
@@ -151,35 +104,6 @@ class DCTFormer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
-    def dct_forward(self, x):
-        """
-        x: Tensor of shape [batch_size, V, seq_len]
-        Returns: Tensor of shape [batch_size, V, dct_n]
-        """
-        batch_size, V, seq_len = x.size()
-        x = x.reshape(-1, seq_len)  # [batch_size * V, seq_len]
-        x_dct = self.dct @ x.T  # [dct_n, batch_size * V]
-        x_dct = x_dct.T.reshape(batch_size, V, self.dct_n) # [batch_size, V, dct_n]
-        return x_dct
-
-    def dct_backward(self, x_dct):
-        """
-        x_dct: Tensor of shape [batch_size, V, dct_n]
-        Returns: Tensor of shape [batch_size, V, seq_len]
-        """
-        batch_size, V, dct_n = x_dct.size()
-        # Reshape x_dct to combine batch_size and V for matrix multiplication
-        x_dct = x_dct.reshape(-1, dct_n)  # Shape: [batch_size * V, dct_n]
-
-        # Perform inverse DCT
-        # self.idct: [seq_len, dct_n]
-        # x_dct.T: [dct_n, batch_size * V]
-        x_reconstructed = self.idct @ x_dct.T  # Shape: [seq_len, batch_size * V]
-
-        # Reshape the output back to [batch_size, V, seq_len]
-        x_reconstructed = x_reconstructed.T.reshape(batch_size, V, self.seq_len)  # Shape: [batch_size, V, seq_len]
-        return x_reconstructed
-
     def forward(self, x, time_indices):
         # print(x.shape, time_indices.shape)
         batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]
@@ -193,8 +117,7 @@ class DCTFormer(nn.Module):
         # print(x.shape)
 
         # Prepare input
-        x = self.dct_forward(x) # [batch_size, V, dct_n]
-        x = x.transpose(0, 1)  # [V, batch_size, dct_n]
+        x = x.transpose(0, 1)  # [V, batch_size, seq_len]
         x = self.fc_in(x)  # [V, batch_size, nhid]
 
         # Positional Encoding
@@ -204,10 +127,10 @@ class DCTFormer(nn.Module):
         out = self.transformer(x)  # [V, batch_size, nhid]
 
         # Output layer
-        out = self.fc_out(out)  # [V, batch_size, dct_n]
+        out = self.fc_out(out)  # [V, batch_size, seq_len]
 
-        # Transpose to [batch_size, V, dct_n]
-        out = out.permute(1, 0, 2)  # [batch_size, V, dct_n]
+        # Transpose to [batch_size, V, seq_len]
+        out = out.permute(1, 0, 2)  # [batch_size, V, seq_len]
 
         return out
 
@@ -215,14 +138,14 @@ def main():
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
                                                 batch_size=batch_size, dataset_col=test_col)
 
-    model = DCTFormer(seq_len,
-                      forecast_size,
-                      nhid=nhid,
-                      nhead=nhead,
-                      dim_feedfwd=dim_feedfwd,
-                      nlayers=nlayers,
-                      dropout=dropout,
-                      device=device).to(device)
+    model = Somoformer(seq_len,
+                       forecast_size,
+                       nhid=nhid,
+                       nhead=nhead,
+                       dim_feedfwd=dim_feedfwd,
+                       nlayers=nlayers,
+                       dropout=dropout,
+                       device=device).to(device)
 
     optimizer = AdamW(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
@@ -234,13 +157,12 @@ def main():
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
         summed_true = y_true[..., -forecast_size:].sum(dim=-1)
-        summed_pred = model.dct_backward(y_pred)[..., -forecast_size:].sum(dim=-1)
+        summed_pred = y_pred[..., -forecast_size:].sum(dim=-1)
 
         # squared difference in sigmoid
         aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
-        dct_true = model.dct_forward(y_true)
-        return F.mse_loss(y_pred, dct_true) + 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, y_true) + 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
