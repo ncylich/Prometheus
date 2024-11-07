@@ -143,17 +143,21 @@ def plot_forecast_vs_actual(forecast, actual, gt_seq):
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
+    model = model.to(device)
     model.train()
 
     for epoch in tqdm(range(epochs)):
         epoch_loss = 0
-        for x, y, t, gt_seq in train_loader:
+        for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
+            x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
             loss = criterion(forecast, y)
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
+            if i % 20 == 0:
+                print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
         scheduler.step(epoch_loss)
@@ -165,6 +169,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         total_correct_overall = 0
         with torch.no_grad():
             for x, y, t, gt_seq in test_loader:
+                x, t = x.to(device), t.to(device)
                 output = model(x, t)
                 try:
                     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
