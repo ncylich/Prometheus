@@ -41,7 +41,8 @@ test_col = 'close'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-lr = 2e-4
+lr1 = 1e-3
+lr2 = 1e-4
 epochs = 100
 init_weight_magnitude = 1e-3
 
@@ -155,7 +156,7 @@ class Somoformer(nn.Module):
 
         return out
 
-def main():
+def main(lr=lr1):
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
                                                 batch_size=batch_size, dataset_col=test_col)
 
@@ -200,4 +201,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(lr1)
+    main(lr2)
