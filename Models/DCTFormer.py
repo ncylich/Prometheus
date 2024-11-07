@@ -1,7 +1,8 @@
-if __name__ == '__main__':
-    from Train.train_somoformer import train_model, get_data_loaders
-else:
+import sys
+if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
+else:
+    from Train.train_somoformer import train_model, get_data_loaders
 
 from torchvision.ops.misc import interpolate
 from enum import Enum
