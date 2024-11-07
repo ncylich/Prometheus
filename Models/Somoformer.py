@@ -83,7 +83,9 @@ class TriplePositionalEncoding(nn.Module):
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
+        # init.xavier_uniform_(m.weight)  # Xavier (+/- sqrt(features))
+        # init.zeros_(m.weight)  # Zeros
+        init.normal_(m.weight, mean=0, std=init_weight_magnitude)
         if m.bias is not None:
             init.zeros_(m.bias)
     elif isinstance(m, nn.Embedding):
@@ -121,7 +123,7 @@ class Somoformer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
-        #self.apply(init_weights)
+        self.apply(init_weights)
 
     def post_process(self, x):
         return x
@@ -216,5 +218,5 @@ def main(lr=lr1, w1=0.5, w2=0.5):
 
 
 if __name__ == '__main__':
-    main(lr1)
-    main(lr2)
+    main(lr2, 1, 0)
+    # main(lr2)
