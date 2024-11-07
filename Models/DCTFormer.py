@@ -232,8 +232,15 @@ def main():
         # print(y_pred.shape, y_true.shape)
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
+        # calculating difference in summed_velocities
+        summed_true = y_true[..., -forecast_size:].sum(dim=-1)
+        summed_pred = model.dct_backward(y_pred)[..., -forecast_size:].sum(dim=-1)
+
+        # squared difference in sigmoid
+        aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+
         dct_true = model.dct_forward(y_true)
-        return F.mse_loss(y_pred, dct_true) # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, dct_true) + 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
