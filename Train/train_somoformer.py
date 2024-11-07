@@ -130,6 +130,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         time = self.times[idx + self.backcast_size]
 
         return x.to(device), y.to(device), time.to(device), CL_price_seq.to(device)
+
     def calculate_velocity(self, data):
         velocity = data[1:] - data[:-1]
         return torch.cat([velocity[0].unsqueeze(0), velocity])
