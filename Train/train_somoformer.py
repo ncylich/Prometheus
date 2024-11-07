@@ -98,7 +98,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         self.velocities = {ticker: MultiStockClosingAndVolumeDataset.SCALE_VEL *
             self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
         self.volumes = {ticker: torch.from_numpy(data[ticker + '_volume'].to_numpy()).float() / 1e3 for ticker in tickers}
-        self.price_data = torch.from_numpy(data['CL_' + predict_col].to_numpy()).float()
+        self.price_data = torch.from_numpy(data['CL_' + predict_col].to_numpy()[1:]).float()
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
         self.times = torch.tensor(data['date'].dt.hour.values)
@@ -137,7 +137,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
     def calculate_velocity(self, data):
         return data[1:] - data[:-1]
 
-def plot_forecast_vs_actual(forecast, actual):
+def plot_forecast_vs_actual(forecast, actual, gt_seq):
     plt.figure(figsize=(9, 6))
     plt.plot(forecast, label='Forecast')
     plt.plot(actual, label='Actual')
@@ -194,11 +194,12 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
                 torch.cumsum(forecast, dim=-1, out=forecast)
                 torch.cumsum(y, dim=-1, out=y)
-                # print(forecast.shape, y.shape, gt_seq[:, 0].shape)
-                forecast += gt_seq[:, 0].unsqueeze(1)
-                y += gt_seq[:, 0].unsqueeze(1)
 
-                forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
+                # Squeezing to final point of input
+                forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1) - forecast[:, x.size()[-1] - 1].unsqueeze(1)
+                y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1) - y[:, x.size()[-1] - 1].unsqueeze(1)
+
+                # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
 
                 plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 

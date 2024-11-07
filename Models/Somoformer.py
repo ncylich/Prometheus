@@ -126,6 +126,15 @@ class Somoformer(nn.Module):
     def post_process(self, x):
         return x
 
+    @staticmethod
+    def fix_mean_offset(x, out):
+        input_size = x.size(-1)
+        x_means = x.mean(dim=-1, keepdim=True)
+        out_input_means = out[..., :input_size].mean(dim=-1, keepdim=True)
+        delta_means = x_means - out_input_means
+        out = out + delta_means
+        return out
+
     def forward(self, x, time_indices):
         # print(x.shape, time_indices.shape)
         batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]
@@ -153,6 +162,9 @@ class Somoformer(nn.Module):
 
         # Transpose to [batch_size, V, seq_len]
         out = out.permute(1, 0, 2)  # [batch_size, V, seq_len]
+
+        # Post-process correction
+        out = Somoformer.fix_mean_offset(x, out)
 
         return out
 
