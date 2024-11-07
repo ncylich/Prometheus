@@ -85,6 +85,8 @@ class CrudeClosingAndVolumeDataset(Dataset):
 
 
 class MultiStockClosingAndVolumeDataset(Dataset):
+    SCALE_VEL = 10
+
     def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
         if tickers is None:
@@ -93,7 +95,8 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
 
         self.tickers = tickers
-        self.velocities = {ticker: self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
+        self.velocities = {ticker: MultiStockClosingAndVolumeDataset.SCALE_VEL *
+            self.calculate_velocity(torch.from_numpy(data[ticker + '_' + predict_col].to_numpy()).float()) for ticker in tickers}
         self.volumes = {ticker: torch.from_numpy(data[ticker + '_volume'].to_numpy()).float() / 1e3 for ticker in tickers}
         self.price_data = torch.from_numpy(data['CL_' + predict_col].to_numpy()).float()
         self.backcast_size = backcast_size
@@ -177,6 +180,10 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 # except AttributeError:
                 #     forecast = output
                 forecast = model.post_process(output)  # generalizes try-catch above
+
+                # scaling back to original values
+                y /= MultiStockClosingAndVolumeDataset.SCALE_VEL
+                output /= MultiStockClosingAndVolumeDataset.SCALE_VEL
 
                 # halving values to only consider price data (if applicable)
                 # print(y.shape)

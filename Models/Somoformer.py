@@ -195,7 +195,7 @@ def main(lr=lr1, w1=0.5, w2=0.5):
         # plt.legend()
         # plt.show()
 
-        return w1 * F.l1_loss(y_pred, y_true) + w2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return w1 * F.mse_loss(y_pred, y_true) + w2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
