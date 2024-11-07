@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 1
+factor = 2
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
@@ -90,8 +90,8 @@ class Somoformer(nn.Module):
 
         # Input and output layers
         self.fc_in = nn.Linear(seq_len, nhid)
-        #self.fc_out = nn.Linear(nhid, seq_len)
-        self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
+        self.fc_out = nn.Linear(nhid, seq_len)
+        #self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
 
         # Positional Encoding
         self.positional_encoding = TriplePositionalEncoding(
