@@ -83,6 +83,7 @@ class FeatureTimePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
+
 class TriplePositionalEncoding(nn.Module):
     def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
         super().__init__()
@@ -108,13 +109,13 @@ class TriplePositionalEncoding(nn.Module):
         third = x.size(2) // 3
 
         # Add feature type encoding
-        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types)).repeat_interleave(n_tickers, axis=0).to(self.device).unsqueeze(1)
+        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types, device=self.device)).repeat_interleave(n_tickers, axis=0).unsqueeze(1)
 
         # Add time encoding
-        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices).to(self.device).unsqueeze(0)
+        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices.to(self.device)).unsqueeze(0)
 
         # Add ticker encoding
-        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers)).repeat(self.feature_types, 1).to(self.device).unsqueeze(1)
+        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers, device=self.device)).repeat(self.feature_types, 1).unsqueeze(1)
 
         return self.dropout(x)
 
