@@ -168,17 +168,20 @@ def main():
         summed_true = y_true[..., -forecast_size:].sum(dim=-1)
         summed_pred = y_pred[..., -forecast_size:].sum(dim=-1)
 
+        full_sum = y_pred.sum(dim=-1)
+        Zero_sum = torch.zeros_like(full_sum)
+
         # squared difference in sigmoid
-        aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
         # plt.figure(figsize=(9, 6))
         # plt.plot(y_pred[0][0].clone().detach().cpu(), label='Forecast')
         # plt.plot(y_true[0][0].clone().detach().cpu(), label='Actual')
-        # # plt.plot(gt_seq, label='Ground Truth')
         # plt.legend()
         # plt.show()
 
-        return F.mse_loss(y_pred, y_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, y_true) #+ 0.2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 

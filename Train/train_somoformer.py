@@ -243,7 +243,7 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
     train_dataset = CrudeDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col)
     test_dataset = CrudeDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col)
     data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=1024)
+    test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
     return data_dataloader, test_dataloader
 
 
