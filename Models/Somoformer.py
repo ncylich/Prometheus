@@ -99,8 +99,8 @@ class Somoformer(nn.Module):
 
         # Input and output layers
         self.fc_in = nn.Linear(seq_len, nhid)
-        #self.fc_out = nn.Linear(nhid, seq_len)
-        self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
+        self.fc_out = nn.Linear(nhid, seq_len)
+        #self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
 
         # Positional Encoding
         self.positional_encoding = TriplePositionalEncoding(
@@ -194,7 +194,7 @@ def main():
         # plt.legend()
         # plt.show()
 
-        return F.mse_loss(y_pred, y_true) #+ 0.2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, y_true) + 0.2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 

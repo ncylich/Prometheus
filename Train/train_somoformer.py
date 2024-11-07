@@ -132,8 +132,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         return x.to(device), y.to(device), time.to(device), CL_price_seq.to(device)
 
     def calculate_velocity(self, data):
-        return data
-        #return data[1:] - data[:-1]
+        return data[1:] - data[:-1]
 
 def plot_forecast_vs_actual(forecast, actual):
     plt.figure(figsize=(9, 6))
@@ -186,8 +185,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 y = y[:, 0].squeeze(1)
                 # plot_forecast_vs_actual(output[0][0].cpu(), y[0].cpu())
 
-                # torch.cumsum(forecast, dim=-1, out=forecast)
-                # torch.cumsum(y, dim=-1, out=y)
+                torch.cumsum(forecast, dim=-1, out=forecast)
+                torch.cumsum(y, dim=-1, out=y)
                 # print(forecast.shape, y.shape, gt_seq[:, 0].shape)
                 forecast += gt_seq[:, 0].unsqueeze(1)
                 y += gt_seq[:, 0].unsqueeze(1)
