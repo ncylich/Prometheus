@@ -170,7 +170,7 @@ def main(lr=lr1, w1=0.5, w2=0.5):
                        device=device).to(device)
 
     optimizer = AdamW(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=2)
 
     def loss_function(y_pred, y_true):
         # y_true: [batch_size, V, F]
