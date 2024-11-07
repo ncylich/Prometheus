@@ -1,6 +1,9 @@
-from torchvision.ops.misc import interpolate
+if __name__ == '__main__':
+    from Train.train_somoformer import train_model, get_data_loaders
+else:
+    from Prometheus.Train.train_somoformer import train_model, get_data_loaders
 
-from Train.train_somoformer import train_model, get_data_loaders
+from torchvision.ops.misc import interpolate
 from enum import Enum
 import torch
 from torch import nn
