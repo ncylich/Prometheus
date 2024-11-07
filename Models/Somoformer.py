@@ -156,7 +156,7 @@ class Somoformer(nn.Module):
 
         return out
 
-def main(lr=lr1):
+def main(lr=lr1, w1=0.5, w2=0.5):
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
                                                 batch_size=batch_size, dataset_col=test_col)
 
@@ -195,7 +195,7 @@ def main(lr=lr1):
         # plt.legend()
         # plt.show()
 
-        return 0 * F.mse_loss(y_pred, y_true) + 1 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return w1 * F.l1_loss(y_pred, y_true) + w2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
