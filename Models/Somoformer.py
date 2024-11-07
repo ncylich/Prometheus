@@ -18,6 +18,7 @@ from torch import nn
 import numpy as np
 import math
 import torch.nn.functional as F
+import torch.nn.init as init
 import matplotlib.pyplot as plt
 # import torch_dct as dct
 # from utils.dct import get_dct_matrix
@@ -79,6 +80,14 @@ class TriplePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            init.zeros_(m.bias)
+    elif isinstance(m, nn.Embedding):
+        init.normal_(m.weight, mean=0, std=0.01)
+
 class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
                      dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
@@ -110,6 +119,8 @@ class Somoformer(nn.Module):
                                                    dropout=dropout,
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
+
+        self.apply(init_weights)
 
     def post_process(self, x):
         return x
@@ -169,12 +180,13 @@ def main():
         summed_true = y_true[..., -forecast_size:].sum(dim=-1)
         summed_pred = y_pred[..., -forecast_size:].sum(dim=-1)
 
-        full_sum = y_pred.sum(dim=-1)
-        Zero_sum = torch.zeros_like(full_sum)
+        #full_sum = y_pred.sum(dim=-1)
+        #Zero_sum = torch.zeros_like(full_sum)
 
         # squared difference in sigmoid
         diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
-        zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
+
+        #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
         # plt.figure(figsize=(9, 6))
         # plt.plot(y_pred[0][0].clone().detach().cpu(), label='Forecast')
