@@ -143,7 +143,7 @@ def plot_forecast_vs_actual(forecast, actual, gt_seq):
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
-    model = model.to(device)
+    model.to(device)
     model.train()
 
     for epoch in tqdm(range(epochs)):
@@ -151,6 +151,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
+            print(x.device, t.device, model.device)
             forecast = model(x, t)
             loss = criterion(forecast, y)
             loss.backward()
