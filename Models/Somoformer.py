@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 2
+factor = 4
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
@@ -90,7 +90,7 @@ def init_weights(m):
 
 class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
-                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
+                     dropout=0.1, activation='gelu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
         super(Somoformer, self).__init__()
 
         self.seq_len = seq_len
