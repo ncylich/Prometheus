@@ -134,7 +134,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
         velocity = data[1:] - data[:-1]
         return torch.cat([velocity[0].unsqueeze(0), velocity])
 
-def plot_forecast_vs_actual(forecast, actual, gt_seq):
+def plot_forecast_vs_actual(forecast, actual):
     plt.figure(figsize=(12, 6))
     plt.plot(forecast, label='Forecast')
     plt.plot(actual, label='Actual')
@@ -189,7 +189,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
                 forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
 
-                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu(), gt_seq[0].cpu())
+                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
                 sign_truth = torch.sign(y[:, -1] - y[:, x.size()[-1]])
@@ -229,7 +229,8 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
     dataset_path = '../' * (prometheus_idx + 1) + dataset_path
 
     data = pd.read_csv(dataset_path)
-    data = data[data['expiry-dist'] == 3].copy()  # Only considering 3-month futures
+    data = data[data['expiry-dist'] == 2]  # Only considering 3-month futures
+    data = data.drop_duplicates(subset=['date', 'expiry-dist', 'expiry'], keep='first')
     train_data, test_data = test_train_split(data, test_size_ratio)
 
     mean_std_path = 'mean_std.pth'  # Path to save/load mean and std
