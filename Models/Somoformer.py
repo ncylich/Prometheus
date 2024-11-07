@@ -184,7 +184,7 @@ def main():
         #Zero_sum = torch.zeros_like(full_sum)
 
         # squared difference in sigmoid
-        diff_aux_loss = F.l1_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
         #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
@@ -194,7 +194,7 @@ def main():
         # plt.legend()
         # plt.show()
 
-        return F.l1_loss(y_pred, y_true) + 1 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, y_true) + 1 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
