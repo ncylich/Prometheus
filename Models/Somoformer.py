@@ -90,7 +90,8 @@ class Somoformer(nn.Module):
 
         # Input and output layers
         self.fc_in = nn.Linear(seq_len, nhid)
-        self.fc_out = nn.Linear(nhid, seq_len)
+        #self.fc_out = nn.Linear(nhid, seq_len)
+        self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
 
         # Positional Encoding
         self.positional_encoding = TriplePositionalEncoding(
