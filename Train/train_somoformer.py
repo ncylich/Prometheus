@@ -213,7 +213,13 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         test_losses /= len(test_loader)
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
-        print(f'Correct Ups: {total_correct_ups/len(test_loader)}, Correct Downs: {total_correct_downs/len(test_loader)}, Correct Overall: {total_correct_overall/len(test_loader)}')
+        correct_ups = total_correct_ups/len(test_loader)
+        correct_downs = total_correct_downs/len(test_loader)
+        correct_overall = total_correct_overall/len(test_loader)
+        f1 = 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
+        print(f'Correct Ups: {correct_ups}, Correct Downs: {correct_downs}')
+        print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
+
         sleep(1e-5)
 
 
