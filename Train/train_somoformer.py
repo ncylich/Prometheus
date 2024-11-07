@@ -1,3 +1,4 @@
+import sys
 if 'google.colab' in sys.modules:
     from Prometheus.DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
 else:
