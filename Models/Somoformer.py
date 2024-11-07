@@ -105,6 +105,9 @@ class Somoformer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
+    def post_process(self, x):
+        return x
+
     def forward(self, x, time_indices):
         # print(x.shape, time_indices.shape)
         batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]
@@ -163,7 +166,7 @@ def main():
         # squared difference in sigmoid
         aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
-        return F.mse_loss(y_pred, y_true) + 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return F.mse_loss(y_pred, y_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 

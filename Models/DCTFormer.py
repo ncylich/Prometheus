@@ -186,6 +186,9 @@ class DCTFormer(nn.Module):
         x_reconstructed = x_reconstructed.T.reshape(batch_size, V, self.seq_len)  # Shape: [batch_size, V, seq_len]
         return x_reconstructed
 
+    def post_process(self, x_dict):
+        return self.dct_backward(x_dict)
+
     def forward(self, x, time_indices):
         # print(x.shape, time_indices.shape)
         batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]

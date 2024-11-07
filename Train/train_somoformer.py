@@ -173,10 +173,12 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             for x, y, t, gt_seq in test_loader:
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
-                try:
-                    forecast = model.dct_backward(output) # [batch_size, V, seq_len]
-                except AttributeError:
-                    forecast = output
+                # try:
+                #     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
+                # except AttributeError:
+                #     forecast = output
+                forecast = model.post_process(output)  # generalizes try-catch above
+
                 # halving values to only consider price data (if applicable)
                 # print(y.shape)
                 # plot_forecast_vs_actual(forecast[0], y[0])
