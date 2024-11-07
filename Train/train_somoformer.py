@@ -216,11 +216,10 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
 
     # Updating data path dynamically on dir
     path_dirs = os.getcwd().split('/')[::-1]
-    prometheus_idx = -1
-    # for i, dir in enumerate(path_dirs):
-    #     if dir == 'Prometheus':
-    #         prometheus_idx = i
-    #         break
+    try:
+        prometheus_idx = path_dirs.index('Prometheus')
+    except ValueError:
+        prometheus_idx = -1
     dataset_path = '../' * (prometheus_idx + 1) + dataset_path
 
     data = pd.read_csv(dataset_path)
