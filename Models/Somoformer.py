@@ -44,7 +44,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lr1 = 1e-3
 lr2 = 1e-4
 epochs = 100
-init_weight_magnitude = 1e-1
+init_weight_magnitude = 1e-2
 
 class TriplePositionalEncoding(nn.Module):
     def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
@@ -87,9 +87,10 @@ def init_weights(m):
         # init.zeros_(m.weight)  # Zeros
         init.normal_(m.weight, mean=0, std=init_weight_magnitude)
         if m.bias is not None:
-            init.zeros_(m.bias)
+            # init.zeros_(m.bias)
+            init.normal_(m.bias, mean=0, std=init_weight_magnitude)
     elif isinstance(m, nn.Embedding):
-        init.normal_(m.weight, mean=0, std=0.01)
+        init.normal_(m.weight, mean=0, std=init_weight_magnitude)
 
 class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
@@ -123,7 +124,7 @@ class Somoformer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
-        self.apply(init_weights)
+        self.apply(init_weights)  # Key to properly working
 
     def post_process(self, x):
         return x
