@@ -9,6 +9,7 @@ from ib_insync import *
 import glob
 import pandas as pd
 import combining_parquets
+import squeezing_data
 
 # Base, example, not used
 ticker = 'CL'
@@ -211,9 +212,10 @@ if __name__ == "__main__":
 
     ib.disconnect()
 
-    # Merging parquets
+    # Merging parquets and squeezing data
     combining_parquets.main(day=today)
+    squezzing_data.main(day=today)
 
-    time_taken = datetime.now() - start
     # print formatted time: mm:ss
+    time_taken = datetime.now() - start
     print(f"Total time taken: {time_taken.seconds // 60}:{time_taken.seconds % 60:02d}")
