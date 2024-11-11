@@ -212,7 +212,7 @@ if __name__ == "__main__":
     ib.disconnect()
 
     # Merging parquets
-    combining_parquets.main(date=today)
+    combining_parquets.main(day=today)
 
     time_taken = datetime.now() - start
     # print formatted time: mm:ss
