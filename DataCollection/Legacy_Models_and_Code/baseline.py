@@ -3,23 +3,18 @@ import time
 import pandas as pd
 import numpy as np
 from neuralforecast.models import NBEATS, NHITS
-from neuralforecast.auto import AutoNBEATS, AutoNHITS, AutoFEDformer, AutoAutoformer, AutoInformer, AutoLSTM, AutoDilatedRNN
-from neuralforecast.losses.pytorch import MAE, MSE
+from neuralforecast.losses.pytorch import MAE
 import neuralforecast.core as NeuralForecast
-from statsforecast.ets import switch
 from statsforecast.models import AutoARIMA
 from neuralforecast import NeuralForecast
 from statsforecast import StatsForecast
-from neuralforecast.losses.pytorch import DistributionLoss
-from DataCollection.data_processing import read_processed_parquet, read_parquet_nixtla, print_nf_forecasts, print_np_forecasts, test_train_split
+from DataCollection.Old_Nixtla_Methods.data_processing import read_processed_parquet, print_nf_forecasts, print_np_forecasts, test_train_split
 from tqdm import tqdm
 import logging
 import torch
 import yaml
 # DO NOT USE SKLEARN (messes up neuralforecast & statsforecast)
 import os
-
-from Models.NHits import hidden_dim, Nhits
 
 # Set the environment variable to suppress the warning
 os.environ['NIXTLA_ID_AS_COL'] = '1'
@@ -37,7 +32,7 @@ input_size = input_multiple_upper_bound * forecast_size
 
 random_seed = np.random.randint(37)
 
-df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", reset_times=True, expected_expiry_dist=3)
+df_prepared = read_processed_parquet("../aug16-2024-2yrs.parquet", reset_times=True, expected_expiry_dist=3)
 df_prepared.rename(columns={'date': 'ds', 'close': 'y'}, inplace=True)
 df_prepared = df_prepared[['ds', 'y']]
 

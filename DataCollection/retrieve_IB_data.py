@@ -4,6 +4,7 @@ from dateutil.relativedelta import relativedelta  # pip install python-dateutil
 from concurrent.futures import ThreadPoolExecutor
 from calendar import monthrange
 import os
+import sys
 from ib_insync import *
 import glob
 import pandas as pd
@@ -133,6 +134,10 @@ def get_months(month, num_of_hist_months, num_of_future_months):
     return months
 
 
+def reorder_cols(df, target_order):
+    cols = df.columns.tolist()
+
+
 def convert_csv_to_parquet(input_folder, output_file):
     """
     converts all csv files inside a folder into a single parquet with snappy compression
@@ -148,12 +153,10 @@ def convert_csv_to_parquet(input_folder, output_file):
 
     df = pd.concat(df_list)
     df = df.sort_values(['date', 'expiry'])
-
-    df.set_index('expiry', inplace=True)
-    # df.set_index('dataMonth', inplace=True)
+    df = df.drop_duplicates(subset=['date', 'expiry'], keep='first')
+    df = df[['date', 'expiry', 'open', 'high', 'low', 'close', 'volume', 'barCount', 'average']]  # reordering + removed dataMonth
 
     df.to_parquet(output_file, compression='snappy', index=True)
-
 
 def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
     """
@@ -168,9 +171,6 @@ def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
     print("Data downloaded successfully")
 
 if __name__ == "__main__":
-    import sys
-
-    # main(*sys.argv[1:])
     parser = argparse.ArgumentParser(description="Batch Historical Downloader")
     parser.add_argument("startMonth", type=str, default=curMonth, help="Input current date in yyyymm format.",
                         nargs='?')
@@ -199,9 +199,9 @@ if __name__ == "__main__":
         ticker, exchange = stock
         today = today_dt.strftime('%Y%m%d')
         cDir = f"./IB_Raw_Data/{today}_output_{ticker}/"
-        parquet = f"./IB_Parquet_Data/{today}_output_{ticker}.parquet"
+        parquet = f"./IB_Processed_Data/{today}_output_{ticker}.parquet"
 
-        main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
+        # main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
         convert_csv_to_parquet(cDir, parquet)
 
         time_taken = datetime.now() - curr_start

@@ -1,17 +1,12 @@
 import sys
 if 'google.colab' in sys.modules:
-    from Prometheus.DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+    from Prometheus.DataCollection.data_processing import test_train_split
 else:
-    from DataCollection.data_processing import read_processed_parquet, test_train_split, read_parquet_nixtla
+    from DataCollection.Old_Nixtla_Methods.data_processing import test_train_split
 
-import numpy as np
 from time import sleep
 import torch
-from torch import nn
-from torch.nn import L1Loss, MSELoss
 from torch.nn import functional as F
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import os
