@@ -21,9 +21,11 @@ for file in files:
     dates = table[['date', 'expiry']].drop_duplicates(['date', 'expiry'])
     for date, expiry in dates.values:
         data_expirys.append((date, expiry))
+    print('Time Periods:', len(data_expirys), '\n')
     data_expirys = set(data_expirys)
     if data_periods is None:
         data_periods = data_expirys
     else:
         data_periods = data_periods.intersection(data_expirys)
-print(len(data_periods))
+
+print('Time Periods in common:', len(data_periods))
