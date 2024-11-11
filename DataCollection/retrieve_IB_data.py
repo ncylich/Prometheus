@@ -8,6 +8,7 @@ import sys
 from ib_insync import *
 import glob
 import pandas as pd
+import combining_parquets
 
 # Base, example, not used
 ticker = 'CL'
@@ -209,6 +210,9 @@ if __name__ == "__main__":
         print(f"Time taken for {ticker}: {time_taken.seconds // 60}:{time_taken.seconds % 60:02d}")
 
     ib.disconnect()
+
+    # Merging parquets
+    combining_parquets.main()
 
     time_taken = datetime.now() - start
     # print formatted time: mm:ss

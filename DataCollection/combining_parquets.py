@@ -53,8 +53,8 @@ def main():
     dfs = get_updated_dfs(files)
 
     merged_df = dfs[0]
-    for df in dfs[1:]:
-        merged_df = merged_df.merge(df, on=['date', 'expiry'], how='inner')
+    for stock_df in dfs[1:]:
+        merged_df = merged_df.merge(stock_df, on=['date', 'expiry'], how='inner')
     print(merged_df.columns)
     print(merged_df.head())
     print(len(merged_df))
