@@ -48,8 +48,8 @@ def get_updated_dfs(files):
         dfs.append(df)
     return dfs
 
-def main():
-    files = retrieve_files(DATE)
+def main(day=DATE):
+    files = retrieve_files(day)
     dfs = get_updated_dfs(files)
 
     merged_df = dfs[0]
@@ -80,7 +80,7 @@ def main():
 
     # Would sort, but it's already sorted
 
-    merged_df.to_csv(f"{DATE}_merged.csv", index=True)
+    merged_df.to_csv(f"{day}_merged.csv", index=True)
 
 if __name__ == '__main__':
     main()

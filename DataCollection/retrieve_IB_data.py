@@ -194,11 +194,11 @@ if __name__ == "__main__":
                   ['HG', 'COMEX'],]
                   # ['SI', 'COMEX']]  # SILVER not working
 
+    today = today_dt.strftime('%Y%m%d')
     for stock in stock_list:
         curr_start = datetime.now()
 
         ticker, exchange = stock
-        today = today_dt.strftime('%Y%m%d')
         cDir = f"./IB_Raw_Data/{today}_output_{ticker}/"
         parquet = f"./IB_Processed_Data/{today}_output_{ticker}.parquet"
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     ib.disconnect()
 
     # Merging parquets
-    combining_parquets.main()
+    combining_parquets.main(date=today)
 
     time_taken = datetime.now() - start
     # print formatted time: mm:ss
