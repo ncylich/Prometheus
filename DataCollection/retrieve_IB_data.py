@@ -133,19 +133,6 @@ def get_months(month, num_of_hist_months, num_of_future_months):
     return months
 
 
-def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
-    """
-    Main function which takes optional parameters as month in yyyymm format,
-    number of months in history, number of months ahead.
-    """
-    months = get_months(month, num_of_hist_months, num_of_future_months)
-
-    for month in months:
-        fetch_historical_data(month)
-
-    print("Data downloaded successfully")
-
-
 def convert_csv_to_parquet(input_folder, output_file):
     """
     converts all csv files inside a folder into a single parquet with snappy compression
@@ -160,12 +147,25 @@ def convert_csv_to_parquet(input_folder, output_file):
         df_list.append(df)
 
     df = pd.concat(df_list)
+    df = df.sort_values(['date', 'expiry'])
 
     df.set_index('expiry', inplace=True)
     # df.set_index('dataMonth', inplace=True)
 
     df.to_parquet(output_file, compression='snappy', index=True)
 
+
+def main(month=curMonth, num_of_hist_months=38, num_of_future_months=2):
+    """
+    Main function which takes optional parameters as month in yyyymm format,
+    number of months in history, number of months ahead.
+    """
+    months = get_months(month, num_of_hist_months, num_of_future_months)
+
+    for month in months:
+        fetch_historical_data(month)
+
+    print("Data downloaded successfully")
 
 if __name__ == "__main__":
     import sys
