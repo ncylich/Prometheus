@@ -13,7 +13,6 @@ files = f"""{DATE}_output_CL.parquet
 
 files = [f'IB_Processed_Data/{file}' for file in files.split("\n") if file and file[0] != '#']
 
-# Todo: evaluate just date overlaps (no expiry-distances)
 date_expiry_overlap = None
 date_overlap = None
 for file in files:
