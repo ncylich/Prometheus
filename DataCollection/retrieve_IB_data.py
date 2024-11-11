@@ -201,7 +201,7 @@ if __name__ == "__main__":
         cDir = f"./IB_Raw_Data/{today}_output_{ticker}/"
         parquet = f"./IB_Processed_Data/{today}_output_{ticker}.parquet"
 
-        # main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
+        main(args.startMonth, args.monthsBackInTime, args.monthsAhead)
         convert_csv_to_parquet(cDir, parquet)
 
         time_taken = datetime.now() - curr_start
