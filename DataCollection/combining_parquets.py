@@ -62,6 +62,22 @@ def main():
     merged_df['date'] = pd.to_datetime(merged_df['date'], utc=True)
     merged_df['date'] = merged_df['date'].dt.tz_convert('America/New_York')
 
+    def get_expiry_dist(row):
+        expiry = row['expiry']
+        year, month = expiry // 100, expiry % 100
+        absolute_expiry = year * 12 + month
+
+        date = row['date']
+        year, month = date.year, date.month
+        absolute_date = year * 12 + month
+
+        return absolute_expiry - absolute_date
+
+    merged_df['expiry-dist'] = merged_df.apply(get_expiry_dist, axis=1)
+    cols = merged_df.columns.tolist()
+    cols = cols[:2] + cols[-1:] + cols[2:-1]  # putting new col, expiry-dist, 3rd
+    merged_df = merged_df[cols]
+
     # Would sort, but it's already sorted
 
     merged_df.to_csv(f"{DATE}_merged.csv", index=True)
