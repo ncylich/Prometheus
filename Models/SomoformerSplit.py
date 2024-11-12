@@ -3,7 +3,7 @@ import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
 else:
-    from Train.train_somoformer import train_model, get_data_loaders
+    from Train.train_somoformer import train_model_split, get_data_loaders
 
 from enum import Enum
 import torch
@@ -209,7 +209,7 @@ def main(lr=lr1, w1=0.5, w2=0.5):
 
         return w1 * F.mse_loss(y_pred, y_true) + w2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
-    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
+    train_model_split(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
 
 
 if __name__ == '__main__':
