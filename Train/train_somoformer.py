@@ -1,8 +1,8 @@
 import sys
 if 'google.colab' in sys.modules:
-    from Prometheus.DataCollection.Old_Nixtla_Methods.data_processing import test_train_split
+    from Prometheus.DataCollection.Legacy_Models_and_Code.data_processing import test_train_split
 else:
-    from DataCollection.Old_Nixtla_Methods.data_processing import test_train_split
+    from DataCollection.Legacy_Models_and_Code.data_processing import test_train_split
 
 from time import sleep
 import torch
