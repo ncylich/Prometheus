@@ -85,7 +85,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
         if tickers is None:
-            tickers = ['CL', 'GC', 'NG', 'ES', 'ZN', 'DX', 'HG']
+            tickers = ['CL', 'GC', 'NG', 'ES', 'ZN', 'HG']
 
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
 
@@ -316,7 +316,7 @@ def mae_and_mse_loss(forecast, actual):
 
 
 def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
-                     dataset_path='Prometheus/DataCollection/20241030_merged_squeezed.csv', dataset_col='close'):
+                     dataset_path='Prometheus/DataCollection/20241111_merged_squeezed.csv', dataset_col='close'):
 
     # Updating data path dynamically on dir
     path_dirs = os.getcwd().split('/')[::-1]
