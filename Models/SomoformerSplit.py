@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 4
+factor = 2
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
@@ -94,17 +94,17 @@ def init_weights(m):
         init.normal_(m.weight, mean=0, std=init_weight_magnitude)
 
 class Somoformer(nn.Module):
-    def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
+    def __init__(self, backcast_size, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
                      dropout=0.1, activation='gelu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
         super(Somoformer, self).__init__()
 
-        self.seq_len = seq_len
+        self.backcast_size = backcast_size
         self.forecast_size = forecast_size
         self.device = device
 
         # Input and output layers
-        self.fc_in = nn.Linear(seq_len, nhid)
-        self.fc_out = nn.Linear(nhid, seq_len)
+        self.fc_in = nn.Linear(backcast_size, nhid)
+        self.fc_out = nn.Linear(nhid, forecast_size)
         #self.fc_out = nn.Sequential(nn.Linear(nhid, nhid), nn.Sigmoid(), nn.Linear(nhid, seq_len))
 
         # Positional Encoding
@@ -144,14 +144,6 @@ class Somoformer(nn.Module):
 
     def forward(self, x, time_indices):
         # print(x.shape, time_indices.shape)
-        batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]
-
-        F = self.seq_len
-        out_F = F - in_F
-
-        pad_idx = np.repeat([in_F - 1], out_F)
-        i_idx = np.append(np.arange(0, in_F), pad_idx)
-        x = x[:, :, i_idx]
         # print(x.shape)
 
         # Prepare input
@@ -197,8 +189,9 @@ def main(lr=lr1, w1=0.5, w2=0.5):
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
-        summed_true = y_true[..., -forecast_size:].sum(dim=-1)
-        summed_pred = y_pred[..., -forecast_size:].sum(dim=-1)
+        y_true = y_true[..., -forecast_size:]
+        summed_true = y_true.sum(dim=-1)
+        summed_pred = y_pred.sum(dim=-1)
 
         #full_sum = y_pred.sum(dim=-1)
         #Zero_sum = torch.zeros_like(full_sum)
