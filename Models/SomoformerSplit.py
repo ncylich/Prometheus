@@ -171,7 +171,7 @@ def main(lr=lr1, w1=0.5, w2=0.5):
     data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
                                                 batch_size=batch_size, dataset_col=test_col)
 
-    model = Somoformer(seq_len,
+    model = Somoformer(backcast_size,
                        forecast_size,
                        nhid=nhid,
                        nhead=nhead,
