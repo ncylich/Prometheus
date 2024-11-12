@@ -146,13 +146,22 @@ class Somoformer(nn.Module):
         # print(x.shape, time_indices.shape)
         batch_size, n_tokens, in_F = x.size() # [batch_size, V, in_F]
 
+        # F = self.seq_len
+        # out_F = F - in_F
+        #
+        # pad_idx = np.repeat([in_F - 1], out_F)
+        # i_idx = np.append(np.arange(0, in_F), pad_idx)
+        # x = x[:, :, i_idx]
+        # print(x.shape)
+
         F = self.seq_len
         out_F = F - in_F
 
-        pad_idx = np.repeat([in_F - 1], out_F)
-        i_idx = np.append(np.arange(0, in_F), pad_idx)
-        x = x[:, :, i_idx]
-        # print(x.shape)
+        # Create a padding tensor filled with zeros
+        padding = torch.zeros((batch_size, n_tokens, out_F), device=x.device)
+
+        # Concatenate the original tensor with the padding tensor
+        x = torch.cat((x, padding), dim=2)
 
         # Prepare input
         x = x.transpose(0, 1)  # [V, batch_size, seq_len]
