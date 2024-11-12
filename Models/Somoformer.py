@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 forecast_size = 36
 backcast_size = forecast_size * 2
 
-factor = 4
+factor = 2
 seq_len = backcast_size + forecast_size
 nhid = 128 * factor
 nhead = 8
