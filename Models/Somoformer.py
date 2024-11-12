@@ -45,7 +45,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lr1 = 1e-3
 lr2 = 1e-4
 epochs = 100
-init_weight_magnitude = 1e-5 #/ (factor ** 2)
+init_weight_magnitude = 1e-3 #/ (factor ** 2)
 
 class TriplePositionalEncoding(nn.Module):
     def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
