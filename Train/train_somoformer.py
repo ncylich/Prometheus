@@ -1,6 +1,6 @@
 import sys
 if 'google.colab' in sys.modules:
-    from Prometheus.DataCollection.data_processing import test_train_split
+    from Prometheus.DataCollection.Old_Nixtla_Methods.data_processing import test_train_split
 else:
     from DataCollection.Old_Nixtla_Methods.data_processing import test_train_split
 
