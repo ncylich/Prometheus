@@ -125,7 +125,7 @@ class Somoformer(nn.Module):
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            # init.xavier_uniform_(m.weight)  # Xavier (+/- sqrt(features))
+            # init.xavier_uniform_(m.weight)  # Xavier  # +/- sqrt(features)
             # init.zeros_(m.weight)  # Zeros
             init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
             if m.bias is not None:
