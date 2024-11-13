@@ -18,30 +18,12 @@ from torch import nn
 import numpy as np
 import math
 import torch.nn.functional as F
+import DCTFormerHParams as hparams
 # import torch_dct as dct
 # from utils.dct import get_dct_matrix
 
-
-# Parameters
-
-forecast_size = 36
-backcast_size = forecast_size * 2
-
-factor = 1
-seq_len = backcast_size + forecast_size
-nhid = 128 * factor
-nhead = 8
-dim_feedfwd = 512 * factor
-nlayers = 12
-dropout = 0.1
-batch_size = 1024
-test_col = 'close'
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-lr = 2e-4
-epochs = 100
-init_weight_magnitude = 1e-3
 
 def get_dct_matrix(N):
     """Calculates DCT Matrix of size N."""
@@ -86,7 +68,8 @@ class FeatureTimePositionalEncoding(nn.Module):
 
 
 class TriplePositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
+    def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24,
+                 dropout: float = 0.1, device='cuda:0'):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         self.device = device
@@ -121,8 +104,8 @@ class TriplePositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class DCTFormer(nn.Module):
-    def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
-                     dropout=0.1, activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
+    def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
+                 activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
         super(DCTFormer, self).__init__()
 
         self.seq_len = seq_len
@@ -221,19 +204,19 @@ class DCTFormer(nn.Module):
         return out
 
 def main():
-    data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
-                                                batch_size=batch_size, dataset_col=test_col)
+    data_loader, test_loader = get_data_loaders(hparams.backcast_size, hparams.forecast_size, test_size_ratio=0.2,
+                                                batch_size=hparams.batch_size, dataset_col=hparams.test_col)
 
-    model = DCTFormer(seq_len,
-                      forecast_size,
-                      nhid=nhid,
-                      nhead=nhead,
-                      dim_feedfwd=dim_feedfwd,
-                      nlayers=nlayers,
-                      dropout=dropout,
-                      device=device).to(device)
+    model = DCTFormer(hparams.seq_len,
+                      hparams.forecast_size,
+                      nhid=hparams.nhid,
+                      nhead=hparams.nhead,
+                      dim_feedfwd=hparams.dim_feedfwd,
+                      nlayers=hparams.nlayers,
+                      dropout=hparams.dropout,
+                      device=str(device)).to(device)
 
-    optimizer = AdamW(model.parameters(), lr=lr)
+    optimizer = AdamW(model.parameters(), lr=hparams.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
 
     def loss_function(y_pred, y_true):
@@ -242,16 +225,16 @@ def main():
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
-        summed_true = y_true[..., -forecast_size:].sum(dim=-1)
-        summed_pred = model.dct_backward(y_pred)[..., -forecast_size:].sum(dim=-1)
+        summed_true = y_true[..., -hparams.forecast_size:].sum(dim=-1)
+        summed_pred = model.dct_backward(y_pred)[..., -hparams.forecast_size:].sum(dim=-1)
 
-        # squared difference in sigmoid
-        aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        # squared difference in sigmoid, simplest
+        # aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
         dct_true = model.dct_forward(y_true)
         return F.mse_loss(y_pred, dct_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
-    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
+    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, hparams.epochs)
 
 
 if __name__ == '__main__':
