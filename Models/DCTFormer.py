@@ -224,7 +224,7 @@ class DCTFormer(nn.Module):
 
         return out
 
-def main(config_path=None):
+def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
 
     data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,

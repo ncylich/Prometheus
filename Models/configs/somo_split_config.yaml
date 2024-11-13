@@ -1,0 +1,18 @@
+forecast_size: 36
+backcast_size: 72  # 36 * 2
+
+factor: 2
+seq_len: 108  # backcast_size + forecast_size
+nhid: 256  # 128 * factor
+nhead: 8
+dim_feedfwd: 1024  # 512 * factor
+nlayers: 24
+dropout: 0.1
+batch_size: 1024
+test_col: "close"
+
+lr: 1e-3
+epochs: 100
+init_weight_magnitude: 1e-2
+
+aux_loss_weight: 1

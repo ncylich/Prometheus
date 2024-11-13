@@ -20,32 +20,37 @@ import math
 import torch.nn.functional as F
 import torch.nn.init as init
 import matplotlib.pyplot as plt
-# import torch_dct as dct
-# from utils.dct import get_dct_matrix
+from dataclasses import dataclass
+from load_config import dynamic_load_config
 
 
 # Parameters
 # TODO: Enlarge Model and FT Params for it
 
-forecast_size = 36
-backcast_size = forecast_size * 2
+@dataclass
+class Config:
+    forecast_size: int = 36
+    backcast_size: int = 36 * 2
 
-factor = 2
-seq_len = backcast_size + forecast_size
-nhid = 128 * factor
-nhead = 8
-dim_feedfwd = 512 * factor
-nlayers = 24
-dropout = 0.1
-batch_size = 1024
-test_col = 'close'
+    factor: int = 2
+    seq_len: int = backcast_size + forecast_size
+    nhid: int = 128 * factor
+    nhead: int = 8
+    dim_feedfwd: int = 512 * factor
+    nlayers: int = 24
+    dropout: float = 0.1
+    batch_size: int = 1024
+    test_col: str = 'close'
+
+    lr = 1e-3
+    epochs = 100
+    init_weight_magnitude = 1e-3  # / (factor ** 2)
+
+    aux_loss_weight: float = 1
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-lr1 = 1e-3
-lr2 = 1e-4
-epochs = 100
-init_weight_magnitude = 1e-3 #/ (factor ** 2)
 
 class TriplePositionalEncoding(nn.Module):
     def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
@@ -82,20 +87,10 @@ class TriplePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        # init.xavier_uniform_(m.weight)  # Xavier (+/- sqrt(features))
-        # init.zeros_(m.weight)  # Zeros
-        init.normal_(m.weight, mean=0, std=init_weight_magnitude)
-        if m.bias is not None:
-            init.zeros_(m.bias)
-            # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
-    elif isinstance(m, nn.Embedding):
-        init.normal_(m.weight, mean=0, std=init_weight_magnitude)
 
 class Somoformer(nn.Module):
-    def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6,
-                     dropout=0.1, activation='gelu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
+    def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
+                 activation='gelu', init_weight_magnitude = 1e-3, device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
         super(Somoformer, self).__init__()
 
         self.seq_len = seq_len
@@ -125,7 +120,19 @@ class Somoformer(nn.Module):
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
 
-        self.apply(init_weights)  # Key to properly working
+        self.init_weight_magnitude = init_weight_magnitude
+        self.apply(self.init_weights)  # Key to properly working
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # init.xavier_uniform_(m.weight)  # Xavier (+/- sqrt(features))
+            # init.zeros_(m.weight)  # Zeros
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
+            if m.bias is not None:
+                init.zeros_(m.bias)
+                # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
+        elif isinstance(m, nn.Embedding):
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
 
     def post_process(self, x):
         return x
@@ -184,20 +191,23 @@ class Somoformer(nn.Module):
 
         return out
 
-def main(lr=lr1, w1=0.5, w2=0.5):
-    data_loader, test_loader = get_data_loaders(backcast_size, forecast_size, test_size_ratio=0.2,
-                                                batch_size=batch_size, dataset_col=test_col)
+def main(config_path: str = ''):
+    config = dynamic_load_config(config_path, Config)
 
-    model = Somoformer(seq_len,
-                       forecast_size,
-                       nhid=nhid,
-                       nhead=nhead,
-                       dim_feedfwd=dim_feedfwd,
-                       nlayers=nlayers,
-                       dropout=dropout,
-                       device=device).to(device)
+    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                batch_size=config.batch_size, dataset_col=config.test_col)
 
-    optimizer = AdamW(model.parameters(), lr=lr)
+    model = Somoformer(config.seq_len,
+                       config.forecast_size,
+                       nhid=config.nhid,
+                       nhead=config.nhead,
+                       dim_feedfwd=config.dim_feedfwd,
+                       nlayers=config.nlayers,
+                       dropout=config.dropout,
+                       init_weight_magnitude=config.init_weight_magnitude,
+                       device=str(device)).to(device)
+
+    optimizer = AdamW(model.parameters(), lr=config.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
 
     def loss_function(y_pred, y_true):
@@ -206,14 +216,15 @@ def main(lr=lr1, w1=0.5, w2=0.5):
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
-        summed_true = y_true[..., -forecast_size:].sum(dim=-1)
-        summed_pred = y_pred[..., -forecast_size:].sum(dim=-1)
+        summed_true = y_true[..., -config.forecast_size:].sum(dim=-1)
+        summed_pred = y_pred[..., -config.forecast_size:].sum(dim=-1)
 
         #full_sum = y_pred.sum(dim=-1)
         #Zero_sum = torch.zeros_like(full_sum)
 
         # squared difference in sigmoid
-        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true)) \
+            if config.aux_loss_weight > 0 else 0
 
         #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
@@ -223,12 +234,10 @@ def main(lr=lr1, w1=0.5, w2=0.5):
         # plt.legend()
         # plt.show()
 
-        return w1 * F.mse_loss(y_pred, y_true) + w2 * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return (1 - diff_aux_loss) * F.mse_loss(y_pred, y_true) + diff_aux_loss * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
-    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, epochs)
+    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
 
 if __name__ == '__main__':
-    main(lr1, 1, 0)
-    # main(lr1, 0.5, 0.5)
-    # main(lr2)
+    main()
