@@ -211,6 +211,9 @@ def main(config_path: str = ''):
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
 
     def loss_function(y_pred, y_true):
+        if config.aux_loss_weight <= 0:
+            return F.mse_loss(y_pred, y_true)
+
         # y_true: [batch_size, V, F]
         # print(y_pred.shape, y_true.shape)
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
@@ -223,8 +226,7 @@ def main(config_path: str = ''):
         #Zero_sum = torch.zeros_like(full_sum)
 
         # squared difference in sigmoid
-        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true)) \
-            if config.aux_loss_weight > 0 else 0
+        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
 
         #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
 
