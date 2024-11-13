@@ -18,9 +18,30 @@ from torch import nn
 import numpy as np
 import math
 import torch.nn.functional as F
-import DCTFormerHParams as hparams
+from dataclasses import dataclass
+from load_config import dynamic_load_config
 # import torch_dct as dct
 # from utils.dct import get_dct_matrix
+
+# HParams class for DCTFormer model
+@dataclass
+class Config:
+    forecast_size: int = 36
+    backcast_size: int = forecast_size * 2
+
+    factor: int = 1
+    seq_len: int = backcast_size + forecast_size
+    nhid: int = 128 * factor
+    nhead: int = 8
+    dim_feedfwd: int = 512 * factor
+    nlayers: int = 12
+    dropout: int = 0.1
+    batch_size: int = 1024
+    test_col: str = 'close'
+
+    lr: float = 2e-4
+    epochs: int = 100
+    init_weight_magnitud: float = 1e-3
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -203,20 +224,22 @@ class DCTFormer(nn.Module):
 
         return out
 
-def main():
-    data_loader, test_loader = get_data_loaders(hparams.backcast_size, hparams.forecast_size, test_size_ratio=0.2,
-                                                batch_size=hparams.batch_size, dataset_col=hparams.test_col)
+def main(config_path=None):
+    config = dynamic_load_config(config_path, Config)
 
-    model = DCTFormer(hparams.seq_len,
-                      hparams.forecast_size,
-                      nhid=hparams.nhid,
-                      nhead=hparams.nhead,
-                      dim_feedfwd=hparams.dim_feedfwd,
-                      nlayers=hparams.nlayers,
-                      dropout=hparams.dropout,
+    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                batch_size=config.batch_size, dataset_col=config.test_col)
+
+    model = DCTFormer(config.seq_len,
+                      config.forecast_size,
+                      nhid=config.nhid,
+                      nhead=config.nhead,
+                      dim_feedfwd=config.dim_feedfwd,
+                      nlayers=config.nlayers,
+                      dropout=config.dropout,
                       device=str(device)).to(device)
 
-    optimizer = AdamW(model.parameters(), lr=hparams.lr)
+    optimizer = AdamW(model.parameters(), lr=config.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
 
     def loss_function(y_pred, y_true):
@@ -225,8 +248,8 @@ def main():
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
-        summed_true = y_true[..., -hparams.forecast_size:].sum(dim=-1)
-        summed_pred = model.dct_backward(y_pred)[..., -hparams.forecast_size:].sum(dim=-1)
+        summed_true = y_true[..., -config.forecast_size:].sum(dim=-1)
+        summed_pred = model.dct_backward(y_pred)[..., -config.forecast_size:].sum(dim=-1)
 
         # squared difference in sigmoid, simplest
         # aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
@@ -234,8 +257,8 @@ def main():
         dct_true = model.dct_forward(y_true)
         return F.mse_loss(y_pred, dct_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
-    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, hparams.epochs)
+    train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
 
 if __name__ == '__main__':
-    main()
+    main('configs/dct_config.yaml')
