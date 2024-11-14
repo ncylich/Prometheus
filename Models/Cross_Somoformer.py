@@ -19,7 +19,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
-from load_config import dynamic_load_config
+from Models.load_config import dynamic_load_config
 
 # TODO: fix positional encoding and token breakdown for input and output space
 
