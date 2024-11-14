@@ -89,9 +89,8 @@ class TriplePositionalEncoding(nn.Module):
 
 
 class CustomTransformerEncoderLayer(nn.Module):
-    def __init__(self, fc_over_bc, d_model, nhead, dim_feedforward, dropout, activation, attention_type):
+    def __init__(self, d_model, nhead, dim_feedforward, dropout, activation, attention_type):
         super(CustomTransformerEncoderLayer, self).__init__()
-        self.forecast_dim = int(fc_over_bc * d_model)
         self.attention_type = attention_type  # 'cross' or 'self'
 
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -115,8 +114,9 @@ class CustomTransformerEncoderLayer(nn.Module):
 
         if self.attention_type == 'cross':
             # Cross-attention: future tokens attend to past tokens
-            past_tokens = src[:src.size(0) - self.forecast_dim]
-            future_tokens = src[src.size(0) - self.forecast_dim:]
+            # TODO: MUST FIX
+            past_tokens = src?
+            future_tokens = src?
 
             # Allow future tokens to attend to past tokens
             attn_output, _ = self.self_attn(future_tokens, past_tokens, past_tokens)
@@ -167,7 +167,6 @@ class Somoformer(nn.Module):
         for i in range(nlayers):
             attention_type = attention_types[i % len(attention_types)]
             encoder_layers.append(CustomTransformerEncoderLayer(
-                fc_over_bc=forecast_size / backcast_size,
                 d_model=nhid,
                 nhead=nhead,
                 dim_feedforward=dim_feedfwd,
