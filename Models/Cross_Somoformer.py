@@ -91,7 +91,7 @@ class TriplePositionalEncoding(nn.Module):
 class CustomTransformerEncoderLayer(nn.Module):
     def __init__(self, fc_over_bc, d_model, nhead, dim_feedforward, dropout, activation, attention_type):
         super(CustomTransformerEncoderLayer, self).__init__()
-        self.forecast_dim = fc_over_bc * d_model
+        self.forecast_dim = int(fc_over_bc * d_model)
         self.attention_type = attention_type  # 'cross' or 'self'
 
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
