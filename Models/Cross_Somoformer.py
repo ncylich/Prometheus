@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from load_config import dynamic_load_config
 
+# TODO: fix positional encoding and token breakdown for input and output space
 
 # Parameters
 
@@ -30,7 +31,6 @@ class Config:
     backcast_size: int = 36 * 2
 
     factor: int = 2
-    seq_len: int = backcast_size + forecast_size
     nhid: int = 128 * factor
     nhead: int = 8
     dim_feedfwd: int = 512 * factor
@@ -63,6 +63,7 @@ class TriplePositionalEncoding(nn.Module):
         # Embeddings for tickers
         self.ticker_encoding = nn.Embedding(n_tickers, d_model // 3).to(device)
 
+
     def forward(self, x: torch.Tensor, time_indices: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -70,19 +71,18 @@ class TriplePositionalEncoding(nn.Module):
             time_indices: Tensor of shape [seq_len], indices of time steps
         """
         seq_len, batch_size, d_model = x.size()
+        n_tickers = seq_len // self.feature_types
         third = d_model // 3
 
         # Prepare indices
-        feature_type_indices = torch.arange(self.feature_types, device=self.device).repeat_interleave(seq_len // self.feature_types)
-        time_indices = time_indices.unsqueeze(1).repeat(1, batch_size)
-        ticker_indices = torch.arange(seq_len, device=self.device) % self.feature_types
-
         # Add feature type encoding
-        x += self.feature_type_encoding(feature_type_indices).unsqueeze(1)
+        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types, device=self.device)).repeat_interleave(n_tickers, axis=0).unsqueeze(1)
+
         # Add time encoding
-        x += self.time_encoding(time_indices)
+        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices.to(self.device)).unsqueeze(0)
+
         # Add ticker encoding
-        x += self.ticker_encoding(ticker_indices).unsqueeze(1)
+        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers, device=self.device)).repeat(self.feature_types, 1).unsqueeze(1)
 
         return self.dropout(x)
 
@@ -136,20 +136,19 @@ class CustomTransformerEncoderLayer(nn.Module):
 
 
 class Somoformer(nn.Module):
-    def __init__(self, seq_len, forecast_size, n_features, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
+    def __init__(self, backcast_size, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
                  activation='gelu', init_weight_magnitude=1e-3, device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=5000):
         super(Somoformer, self).__init__()
 
-        self.seq_len = seq_len
+        self.backcast_size = backcast_size
         self.forecast_size = forecast_size
-        self.backcast_size = seq_len - forecast_size
         self.device = device
 
         self.d_model = nhid  # hidden size
 
         # Input and output layers
-        self.input_projection = nn.Linear(n_features, self.d_model)
-        self.output_projection = nn.Linear(self.d_model, n_features)
+        self.input_projection = nn.Linear(backcast_size, self.d_model)
+        self.output_projection = nn.Linear(self.d_model, forecast_size)
 
         # Positional Encoding
         self.positional_encoding = TriplePositionalEncoding(
@@ -167,6 +166,7 @@ class Somoformer(nn.Module):
         for i in range(nlayers):
             attention_type = attention_types[i % len(attention_types)]
             encoder_layers.append(CustomTransformerEncoderLayer(
+                forecast_size=forecast_size,
                 d_model=nhid,
                 nhead=nhead,
                 dim_feedforward=dim_feedfwd,
@@ -188,20 +188,15 @@ class Somoformer(nn.Module):
         elif isinstance(m, nn.Embedding):
             init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
 
-    def forward(self, x):
+    def forward(self, x, time_indices):
         """
         Args:
             x: Tensor of shape [batch_size, seq_len, n_features]
         """
-        batch_size, seq_len, n_features = x.size()
-        device = x.device
-
         # Prepare input
-        x_proj = self.input_projection(x)  # [batch_size, seq_len, nhid]
-        x_proj = x_proj.permute(1, 0, 2)  # [seq_len, batch_size, nhid]
+        x = x.transpose(0, 1)  # [batch_size, n_features, input_len] -> [n_features, batch_size, input_len]
+        x_proj = self.input_projection(x)  # [n_features, batch_size, nhid]
 
-        # Positional Encoding
-        time_indices = torch.arange(seq_len, device=device)
         x_proj = self.positional_encoding(x_proj, time_indices)
 
         # Pass through transformer layers
@@ -220,12 +215,11 @@ def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
 
     # Adjust the data loader to provide x of shape [batch_size, seq_len, n_features]
-    data_loader, test_loader, n_features = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
                                                 batch_size=config.batch_size, dataset_col=config.test_col)
 
-    model = Somoformer(config.seq_len,
-                       config.forecast_size,
-                       n_features,
+    model = Somoformer(backcast_size=config.backcast_size,
+                       forecast_size=config.forecast_size,
                        nhid=config.nhid,
                        nhead=config.nhead,
                        dim_feedfwd=config.dim_feedfwd,
@@ -238,7 +232,7 @@ def main(config_path: str = ''):
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
 
     def loss_function(y_pred, y_true):
-        return F.mse_loss(y_pred, y_true)
+        return F.mse_loss(y_pred, y_true[...,-config.forecast_size:])
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
