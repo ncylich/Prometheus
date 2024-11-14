@@ -71,7 +71,7 @@ class TriplePositionalEncoding(nn.Module):
             time_indices: Tensor of shape [seq_len], indices of time steps
         """
         seq_len, batch_size, d_model = x.size()
-        n_tickers = seq_len // self.feature_types
+        n_tickers = seq_len // self.feature_types  # for case of variable number of tickers
         third = d_model // 3
 
         # Prepare indices
@@ -88,9 +88,9 @@ class TriplePositionalEncoding(nn.Module):
 
 
 class CustomTransformerEncoderLayer(nn.Module):
-    def __init__(self, forecast_size, d_model, nhead, dim_feedforward, dropout, activation, attention_type):
+    def __init__(self, fc_over_bc, d_model, nhead, dim_feedforward, dropout, activation, attention_type):
         super(CustomTransformerEncoderLayer, self).__init__()
-        self.forecast_size = forecast_size
+        self.forecast_dim = fc_over_bc * d_model
         self.attention_type = attention_type  # 'cross' or 'self'
 
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -114,8 +114,8 @@ class CustomTransformerEncoderLayer(nn.Module):
 
         if self.attention_type == 'cross':
             # Cross-attention: future tokens attend to past tokens
-            past_tokens = src[:src.size(0) - self.forecast_size]
-            future_tokens = src[src.size(0) - self.forecast_size:]
+            past_tokens = src[:src.size(0) - self.forecast_dim]
+            future_tokens = src[src.size(0) - self.forecast_dim:]
 
             # Allow future tokens to attend to past tokens
             attn_output, _ = self.self_attn(future_tokens, past_tokens, past_tokens)
@@ -166,7 +166,7 @@ class Somoformer(nn.Module):
         for i in range(nlayers):
             attention_type = attention_types[i % len(attention_types)]
             encoder_layers.append(CustomTransformerEncoderLayer(
-                forecast_size=forecast_size,
+                fc_over_bc=forecast_size / backcast_size,
                 d_model=nhid,
                 nhead=nhead,
                 dim_feedforward=dim_feedfwd,
