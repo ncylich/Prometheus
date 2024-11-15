@@ -3,7 +3,16 @@
 */.DS_Store/*
 DataCollection/output/*
 */__pycache__/*
+*/__pycache__/
+*/*.pyc
 */.vscode/*
 */test.py
+
 DataCollection/IB_Raw_Data/*
 DataCollection/IB_Processed_Data/*
+
+DataCollection/long_term_data/*.txt
+DataCollection/long_term_data/*.csv
+DataCollection/long_term_data/*.zip
+
+DataCollection/CL_continuous_adjusted/*
