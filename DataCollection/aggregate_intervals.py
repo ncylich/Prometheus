@@ -27,7 +27,7 @@ def process_col(col, col_name):
 def aggregate_intervals(df, saved_csv, interval=5):
     """
     Aggregate data into intervals:
-        output directly into a csv instead of df to save memory and time for large datasets
+    - outputs directly into a csv instead of df to save memory and time for large datasets
     """
     cols = df.columns
     with open(saved_csv, 'w') as f:
