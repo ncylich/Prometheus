@@ -70,12 +70,22 @@ def get_tickers(files):
     return tickers
 
 def load_df(file):
+    if file.endswith('.csv'):
+        df = pd.read_csv(file, dtype=COLS)
+    elif file.endswith('.parquet'):
+        df = pd.read_parquet(file)
+    else:
+        raise ValueError(f'File type not supported for: {file}')
+
+    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df['date'] = df['date'].dt.tz_convert('America/New_York')
+    return df
+
+def load_and_format_df(file):
     """
     Load dataframe from file
     """
-    df = pd.read_csv(os.path.join(data_dir, file), dtype=COLS)
-    df['date'] = pd.to_datetime(df['date'], utc=True)
-    df['date'] = df['date'].dt.tz_convert('America/New_York')
+    df = load_df(os.path.join(data_dir, file))
 
     ticker = get_ticker(file)
     cols = set(df.columns) - {'date'}
@@ -98,7 +108,7 @@ def merge_data(data_files, adjusted=False):
     cl_idx = data_files.index(cl_str)
     data_files = [data_files[cl_idx]] + data_files[:cl_idx] + data_files[cl_idx + 1:]
 
-    dfs = [load_df(file) for file in data_files]
+    dfs = [load_and_format_df(file) for file in data_files]
     merged_df = dfs[0]
     for stock_df in dfs[1:]:
         merged_df = merged_df.merge(stock_df, on=['date'], how='inner')
