@@ -6,3 +6,4 @@ DataCollection/output/*
 */.vscode/*
 */test.py
 DataCollection/IB_Raw_Data/*
+DataCollection/IB_Processed_Data/*

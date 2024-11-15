@@ -109,13 +109,13 @@ def main():
 
     df = merge_data(files)
     print('UNadjusted number of row:', len(df))
-    path = os.path.join(data_dir, '1min_long_term_merged_UNadjusted.csv')
-    df.to_csv(path, index=False)
+    path = os.path.join(data_dir, '1min_long_term_merged_UNadjusted.parquet')
+    df.to_parquet(path, compression='snappy', index=True)
 
     df = merge_data(files, adjusted=True)
     print('adjusted number of row:', len(df))
-    path = os.path.join(data_dir, '1min_long_term_merged_adjusted.csv')
-    df.to_csv(path, index=False)
+    path = os.path.join(data_dir, '1min_long_term_merged_adjusted.parquet')
+    df.to_parquet(path, compression='snappy', index=True)
 
 if __name__ == '__main__':
     main()

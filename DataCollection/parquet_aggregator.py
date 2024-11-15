@@ -25,12 +25,6 @@ def convert_csv_to_parquet(input_folder, output_file):
 
     df.to_parquet(output_file, compression='snappy', index=True)
 
-    #
-
-
-    #table = pa.Table.from_pandas(df)
-    #pq.write_table(table, output_file, compression='snappy')
-
 
 if __name__ == "__main__":
 
