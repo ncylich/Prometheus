@@ -172,10 +172,12 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         total_correct_ups = 0
         total_correct_downs = 0
         total_correct_overall = 0
+        total_loss = 0.0
         with torch.no_grad():
             for i, (x, y, t, gt_seq) in enumerate(test_loader):
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
+                total_loss += criterion(output, y).item()
                 # try:
                 #     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
                 # except AttributeError:
@@ -221,6 +223,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
         sleep(1e-5)
+        print(f'Epoch loss: {total_loss/len(test_loader)}')
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         correct_ups = total_correct_ups/len(test_loader)
         correct_downs = total_correct_downs/len(test_loader)
