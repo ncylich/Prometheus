@@ -76,11 +76,14 @@ class CrudeClosingAndVolumeDataset(Dataset):
 
 class MultiStockClosingAndVolumeDataset(Dataset):
     SCALE_VEL = 10  # help with model initialization
+    IDX_TO_TICKERS = None
 
     def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
         if tickers is None:
             tickers = set([col.split('_')[0] for col in list(data.columns) if '_' in col])
+        if MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS is None:
+            MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS = list(tickers)
 
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
 
@@ -141,6 +144,26 @@ def test_train_split(df, test_size_ratio):
     return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
 
 
+def correct_ups_and_downs(forecast, actual, input_size):
+    forecast = forecast.permute(1, 0, 2)
+    actual = actual.permute(1, 0, 2)
+
+    forecast_end = forecast[:, :, -1]
+    actual_end = actual[:, :, -1]
+
+    forecast_start = forecast[:, :, input_size]
+    actual_start = actual[:, :, input_size]
+
+    forecast_deltas = forecast_end - forecast_start
+    actual_deltas = actual_end - actual_start
+
+    correct_ups = torch.sum((forecast_deltas > 0) & (actual_deltas > 0)) / torch.sum(actual_deltas > 0, dim=1)
+    correct_downs = torch.sum((forecast_deltas < 0) & (actual_deltas < 0)) / torch.sum(actual_deltas < 0, dim=1)
+    correct_overall = torch.sum(torch.sign(forecast_deltas) == torch.sign(actual_deltas), dim=1) / len(actual_deltas)
+
+    return torch.stack((correct_ups, correct_downs, correct_overall), dim=1)  # create 16x3 result tensor
+
+
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
     model.to(device)
 
@@ -148,6 +171,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         model.train()
         epoch_loss = 0
         for i, (x, y, t, gt_seq) in enumerate(train_loader):
+            break
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
@@ -168,6 +192,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
 
         test_losses = torch.tensor([0,0], dtype=torch.float32)
+        stock_results = torch.zeros((16, 3))
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
@@ -191,12 +216,14 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 # halving values to only consider price data (if applicable)
                 # print(y.shape)
                 # plot_forecast_vs_actual(forecast[0], y[0])
-                forecast = forecast[:, 0].squeeze(1)
-                y = y[:, 0].squeeze(1)
-                # plot_forecast_vs_actual(output[0][0].cpu(), y[0].cpu())
-
                 torch.cumsum(forecast, dim=-1, out=forecast)
                 torch.cumsum(y, dim=-1, out=y)
+
+                new_stock_results = correct_ups_and_downs(forecast, y, x.size()[-1])
+                stock_results += new_stock_results
+
+                forecast = forecast[:, 0].squeeze(1)
+                y = y[:, 0].squeeze(1)
 
                 # Squeezing to final point of input
                 forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1) - forecast[:, x.size()[-1] - 1].unsqueeze(1)
@@ -225,100 +252,108 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         sleep(1e-5)
         print(f'Epoch loss: {total_loss/len(test_loader)}')
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
-        correct_ups = total_correct_ups/len(test_loader)
-        correct_downs = total_correct_downs/len(test_loader)
-        correct_overall = total_correct_overall/len(test_loader)
-        f1 = 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
-        print(f'Correct Ups: {correct_ups}, Correct Downs: {correct_downs}')
-        print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
+
+        stock_results = stock_results / len(test_loader)
+        def get_f1(correct_ups, correct_downs):
+            if correct_ups + correct_downs == 0:
+                return 0
+            return 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
+        stock_results = [[i, correct_ups, correct_downs, correct_overall, get_f1(correct_ups, correct_downs)]
+                         for i, (correct_ups, correct_downs, correct_overall) in enumerate(stock_results.tolist())]
+        stock_results = sorted(stock_results, key=lambda x: x[1][-1], reverse=True)  # sort by highest overall correct
+        for stock in stock_results:
+            i, correct_ups, correct_downs, correct_overall, f1 = stock
+            print(f'{MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS[i]}:')
+            print(f'Correct Ups: {correct_ups}, Correct Downs: {stock[1]},')
+            print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
 
         sleep(1e-5)
 
 
-def train_model_split(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
-    model.to(device)
-
-    for epoch in tqdm(range(epochs)):
-        model.train()
-        epoch_loss = 0
-        for i, (x, y, t, gt_seq) in enumerate(train_loader):
-            x, y, t = x.to(device), y.to(device), t.to(device)
-            optimizer.zero_grad()
-            forecast = model(x, t)
-            loss = criterion(forecast, y)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-            if i % 5 == 0:
-                print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
-        epoch_loss /= len(train_loader)
-        print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
-        scheduler.step(epoch_loss)
-
-        test_losses = torch.tensor([0,0], dtype=torch.float32)
-        model.eval()
-        total_correct_ups = 0
-        total_correct_downs = 0
-        total_correct_overall = 0
-        total_loss = 0.0
-        with torch.no_grad():
-            for i, (x, y, t, gt_seq) in enumerate(test_loader):
-                x, t = x.to(device), t.to(device)
-                output = model(x, t)
-                total_loss += criterion(output, y).item()
-                # try:
-                #     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
-                # except AttributeError:
-                #     forecast = output
-                forecast = model.post_process(output)  # generalizes try-catch above
-
-                # scaling back to original values
-                y /= MultiStockClosingAndVolumeDataset.SCALE_VEL
-                output /= MultiStockClosingAndVolumeDataset.SCALE_VEL
-
-                # halving values to only consider price data (if applicable)
-                # print(y.shape)
-                # plot_forecast_vs_actual(forecast[0], y[0])
-                forecast = forecast[:, 0].squeeze(1)
-                y = y[..., -model.forecast_size:][:, 0].squeeze(1)
-                # plot_forecast_vs_actual(output[0][0].cpu(), y[0].cpu())
-
-                torch.cumsum(forecast, dim=-1, out=forecast)
-                torch.cumsum(y, dim=-1, out=y)
-
-                # Squeezing to final point of input
-                forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
-                y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
-
-                # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
-                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
-
-                # calculate percentage of correct ups, correct downs, and correct overall
-                sign_truth = torch.sign(y[:, -1] - y[:, 0])
-                sign_forecast = torch.sign(forecast[:, -1] - forecast[:, 0])
-                correct_ups = torch.sum((sign_truth + sign_forecast) == 2) / torch.sum(sign_truth == 1)
-                correct_downs = torch.sum((sign_truth + sign_forecast) == -2) / torch.sum(sign_truth == -1)
-                correct_overall = torch.sum(sign_truth == sign_forecast) / len(sign_truth)
-                total_correct_ups += correct_ups
-                total_correct_downs += correct_downs
-                total_correct_overall += correct_overall
-
-                forecast = forecast[:, -model.forecast_size:]
-                y = y[:, -model.forecast_size:]
-
-                test_losses += mae_and_mse_loss(forecast, y)
-        test_losses /= len(test_loader)
-        sleep(1e-5)
-        print(f'Epoch loss: {total_loss/len(test_loader)}')
-        print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
-        correct_ups = total_correct_ups/len(test_loader)
-        correct_downs = total_correct_downs/len(test_loader)
-        correct_overall = total_correct_overall/len(test_loader)
-        f1 = 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
-        print(f'Correct Ups: {correct_ups}, Correct Downs: {correct_downs}')
-        print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
-
-        sleep(1e-5)
+# def train_model_split(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):
+#     model.to(device)
+#
+#     for epoch in tqdm(range(epochs)):
+#         model.train()
+#         epoch_loss = 0
+#         for i, (x, y, t, gt_seq) in enumerate(train_loader):
+#             x, y, t = x.to(device), y.to(device), t.to(device)
+#             optimizer.zero_grad()
+#             forecast = model(x, t)
+#             loss = criterion(forecast, y)
+#             loss.backward()
+#             optimizer.step()
+#             epoch_loss += loss.item()
+#             if i % 5 == 0:
+#                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
+#         epoch_loss /= len(train_loader)
+#         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
+#         scheduler.step(epoch_loss)
+#
+#         test_losses = torch.tensor([0,0], dtype=torch.float32)
+#         model.eval()
+#         total_correct_ups = 0
+#         total_correct_downs = 0
+#         total_correct_overall = 0
+#         total_loss = 0.0
+#         with torch.no_grad():
+#             for i, (x, y, t, gt_seq) in enumerate(test_loader):
+#                 x, t = x.to(device), t.to(device)
+#                 output = model(x, t)
+#                 total_loss += criterion(output, y).item()
+#                 # try:
+#                 #     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
+#                 # except AttributeError:
+#                 #     forecast = output
+#                 forecast = model.post_process(output)  # generalizes try-catch above
+#
+#                 # scaling back to original values
+#                 y /= MultiStockClosingAndVolumeDataset.SCALE_VEL
+#                 output /= MultiStockClosingAndVolumeDataset.SCALE_VEL
+#
+#                 # halving values to only consider price data (if applicable)
+#                 # print(y.shape)
+#                 # plot_forecast_vs_actual(forecast[0], y[0])
+#                 forecast = forecast[:, 0].squeeze(1)
+#                 y = y[..., -model.forecast_size:][:, 0].squeeze(1)
+#                 # plot_forecast_vs_actual(output[0][0].cpu(), y[0].cpu())
+#
+#                 torch.cumsum(forecast, dim=-1, out=forecast)
+#                 torch.cumsum(y, dim=-1, out=y)
+#
+#                 # Squeezing to final point of input
+#                 forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
+#                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
+#
+#                 # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
+#                 plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
+#
+#                 # calculate percentage of correct ups, correct downs, and correct overall
+#                 sign_truth = torch.sign(y[:, -1] - y[:, 0])
+#                 sign_forecast = torch.sign(forecast[:, -1] - forecast[:, 0])
+#                 correct_ups = torch.sum((sign_truth + sign_forecast) == 2) / torch.sum(sign_truth == 1)
+#                 correct_downs = torch.sum((sign_truth + sign_forecast) == -2) / torch.sum(sign_truth == -1)
+#                 correct_overall = torch.sum(sign_truth == sign_forecast) / len(sign_truth)
+#                 total_correct_ups += correct_ups
+#                 total_correct_downs += correct_downs
+#                 total_correct_overall += correct_overall
+#
+#                 forecast = forecast[:, -model.forecast_size:]
+#                 y = y[:, -model.forecast_size:]
+#
+#                 test_losses += mae_and_mse_loss(forecast, y)
+#         test_losses /= len(test_loader)
+#         sleep(1e-5)
+#         print(f'Epoch loss: {total_loss/len(test_loader)}')
+#         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
+#         correct_ups = total_correct_ups/len(test_loader)
+#         correct_downs = total_correct_downs/len(test_loader)
+#         correct_overall = total_correct_overall/len(test_loader)
+#         f1 = 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
+#         print(f'Correct Ups: {correct_ups}, Correct Downs: {correct_downs}')
+#         print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
+#
+#         sleep(1e-5)
 
 
 def mae_and_mse_loss(forecast, actual):
