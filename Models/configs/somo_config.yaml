@@ -11,7 +11,7 @@ dropout: 0.1
 batch_size: 4096
 test_col: "close"
 
-lr: 1e-3
+lr: 1e-4
 epochs: 20
 init_weight_magnitude: 1e-2
 
