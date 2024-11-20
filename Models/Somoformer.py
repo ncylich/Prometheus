@@ -4,7 +4,7 @@ if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config
 else:
-    from Train.train_somoformer import train_model, get_old_data_loaders, get_long_term_data_loaders
+    from Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
     from Models.load_config import dynamic_load_config
 
 from enum import Enum

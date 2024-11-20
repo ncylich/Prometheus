@@ -4,7 +4,7 @@ if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config
 else:
-    from Train.train_somoformer import train_model, get_data_loaders
+    from Train.train_somoformer import train_model, get_original_data_loaders
     from Models.load_config import dynamic_load_config
 
 from enum import Enum
@@ -215,8 +215,8 @@ def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
 
     # Adjust the data loader to provide x of shape [batch_size, seq_len, n_features]
-    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
-                                                batch_size=config.batch_size, dataset_col=config.test_col)
+    data_loader, test_loader = get_original_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                         batch_size=config.batch_size, dataset_col=config.test_col)
 
     model = Somoformer(backcast_size=config.backcast_size,
                        forecast_size=config.forecast_size,

@@ -2,7 +2,7 @@ import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
 else:
-    from Train.train_somoformer import train_model, get_data_loaders
+    from Train.train_somoformer import train_model, get_original_data_loaders
 
 from torchvision.ops.misc import interpolate
 from enum import Enum
@@ -227,8 +227,8 @@ class DCTFormer(nn.Module):
 def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
 
-    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
-                                                batch_size=config.batch_size, dataset_col=config.test_col)
+    data_loader, test_loader = get_original_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                         batch_size=config.batch_size, dataset_col=config.test_col)
 
     model = DCTFormer(config.seq_len,
                       config.forecast_size,

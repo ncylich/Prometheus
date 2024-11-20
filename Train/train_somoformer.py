@@ -315,8 +315,8 @@ def mae_and_mse_loss(forecast, actual):
     return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 
-def get_old_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
-                     dataset_path='Prometheus/DataCollection/20241111_merged_squeezed.csv', dataset_col='close'):
+def get_original_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
+                              dataset_path='Prometheus/DataCollection/20241111_merged_squeezed.csv', dataset_col='close'):
 
     # Updating data path dynamically on dir
     path_dirs = os.getcwd().split('/')[::-1]
