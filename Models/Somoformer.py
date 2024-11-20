@@ -4,7 +4,7 @@ if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config
 else:
-    from Train.train_somoformer import train_model, get_data_loaders
+    from Train.train_somoformer import train_model, get_old_data_loaders, get_long_term_data_loaders
     from Models.load_config import dynamic_load_config
 
 from enum import Enum
@@ -91,7 +91,7 @@ class TriplePositionalEncoding(nn.Module):
 
 class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
-                 activation='gelu', init_weight_magnitude = 1e-3, device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24):
+                 activation='gelu', init_weight_magnitude = 1e-3, device='cuda:0', feature_types=2, n_tickers=8, max_time_steps=24):
         super(Somoformer, self).__init__()
 
         self.seq_len = seq_len
@@ -195,8 +195,11 @@ class Somoformer(nn.Module):
 def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
 
-    data_loader, test_loader = get_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
-                                                batch_size=config.batch_size, dataset_col=config.test_col)
+    # data_loader, test_loader = get_old_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+    #                                             batch_size=config.batch_size, dataset_col=config.test_col)
+
+    data_loader, test_loader = get_long_term_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                          batch_size=config.batch_size, dataset_col=config.test_col)
 
     model = Somoformer(config.seq_len,
                        config.forecast_size,

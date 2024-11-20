@@ -85,7 +85,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
     def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
         if tickers is None:
-            tickers = ['CL', 'GC', 'NG', 'ES', 'ZN', 'HG']
+            tickers = set([col.split('_')[0] for col in list(data.columns) if '_' in col])
 
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
 
@@ -315,7 +315,7 @@ def mae_and_mse_loss(forecast, actual):
     return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 
-def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
+def get_old_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
                      dataset_path='Prometheus/DataCollection/20241111_merged_squeezed.csv', dataset_col='close'):
 
     # Updating data path dynamically on dir
@@ -340,6 +340,25 @@ def get_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_siz
     test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
     return data_dataloader, test_dataloader
 
+def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
+                        dataset_path='Prometheus/DataCollection/long_term_data/5min_long_term_merged_UNadjusted.parquet'):
+    path_dirs = os.getcwd().split('/')[::-1]
+    try:
+        prometheus_idx = path_dirs.index('Prometheus')
+    except ValueError:
+        prometheus_idx = -1
+    dataset_path = '../' * (prometheus_idx + 1) + dataset_path
+    data = pd.read_parquet(dataset_path)
+    train_data, test_data = test_train_split(data, test_size_ratio)
+
+    CrudeDataset = MultiStockClosingAndVolumeDataset
+    train_dataset = CrudeDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col)
+    test_dataset = CrudeDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col)
+
+    data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
+    return data_dataloader, test_dataloader
+
 
 if __name__ == '__main__':
-    data_loader, test_loader = get_data_loaders(72, 36, test_size_ratio=.2, batch_size=128)
+    data_loader, test_loader = get_long_term_data_loaders(72, 36, test_size_ratio=.2, batch_size=128)
