@@ -2,10 +2,10 @@ from torchvision.ops.misc import interpolate
 import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
-    from Prometheus.Models.load_config import dynamic_load_config
+    from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
 else:
     from Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
-    from Models.load_config import dynamic_load_config
+    from Models.load_config import dynamic_load_config, update_config_with_factor
 
 from enum import Enum
 import torch
@@ -194,6 +194,7 @@ class Somoformer(nn.Module):
 
 def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
+    config = update_config_with_factor(config)
 
     # data_loader, test_loader = get_old_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
     #                                             batch_size=config.batch_size, dataset_col=config.test_col)

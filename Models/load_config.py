@@ -31,6 +31,7 @@ def load_config_from_json_or_yaml(filepath: str, config_class):
         # Get the type of the default value, or set to same as value if not present
         tp = type(getattr(config, key, value))
         setattr(config, key, tp(value))  # Convert to the same type as the default
+
     return config
 
 def load_config_from_xml(filepath: str, config_class):
@@ -47,4 +48,9 @@ def load_config_from_xml(filepath: str, config_class):
         tp = type(getattr(config, elem.tag, data))
         setattr(config, elem.tag, tp(data))  # Convert to the same type as the default
 
+    return config
+
+def update_config_with_factor(config):
+    config.nhid *= config.factor
+    config.dim_feedfwd *= config.factor
     return config

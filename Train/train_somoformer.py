@@ -74,7 +74,7 @@ class CrudeClosingAndVolumeDataset(Dataset):
 
 
 class MultiStockClosingAndVolumeDataset(Dataset):
-    SCALE_VEL = 10
+    SCALE_VEL = 10  # help with model initialization
 
     def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
         # columns in data csv: ['date', 'open', 'high', 'low', 'close', 'volume', 'ticker']
@@ -250,10 +250,12 @@ def train_model_split(model, train_loader, test_loader, criterion, optimizer, sc
         total_correct_ups = 0
         total_correct_downs = 0
         total_correct_overall = 0
+        total_loss = 0.0
         with torch.no_grad():
             for x, y, t, gt_seq in test_loader:
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
+                total_loss += criterion(output, y).item()
                 # try:
                 #     forecast = model.dct_backward(output) # [batch_size, V, seq_len]
                 # except AttributeError:
@@ -295,10 +297,10 @@ def train_model_split(model, train_loader, test_loader, criterion, optimizer, sc
                 forecast = forecast[:, -model.forecast_size:]
                 y = y[:, -model.forecast_size:]
 
-
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
         sleep(1e-5)
+        print(f'Epoch loss: {total_loss/len(test_loader)}')
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         correct_ups = total_correct_ups/len(test_loader)
         correct_downs = total_correct_downs/len(test_loader)
@@ -340,7 +342,7 @@ def get_original_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, 
     return data_dataloader, test_dataloader
 
 def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
-                        dataset_path='Prometheus/DataCollection/long_term_data/5min_long_term_merged_UNadjusted.parquet'):
+                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet'):
     path_dirs = os.getcwd().split('/')[::-1]
     try:
         prometheus_idx = path_dirs.index('Prometheus')
