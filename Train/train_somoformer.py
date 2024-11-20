@@ -171,7 +171,6 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         model.train()
         epoch_loss = 0
         for i, (x, y, t, gt_seq) in enumerate(train_loader):
-            break
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
@@ -192,7 +191,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
 
         test_losses = torch.tensor([0,0], dtype=torch.float32)
-        stock_results = torch.zeros((16, 3))
+        stock_results = torch.zeros((16, 3)).to(device)
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
@@ -259,7 +258,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 return 0
             return 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
         stock_results = [[i, correct_ups, correct_downs, correct_overall, get_f1(correct_ups, correct_downs)]
-                         for i, (correct_ups, correct_downs, correct_overall) in enumerate(stock_results.tolist())]
+                         for i, (correct_ups, correct_downs, correct_overall) in enumerate(stock_results.cpu().tolist())]
         stock_results = sorted(stock_results, key=lambda x: x[1][-1], reverse=True)  # sort by highest overall correct
         for stock in stock_results:
             i, correct_ups, correct_downs, correct_overall, f1 = stock
