@@ -196,7 +196,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
 
         test_losses = torch.tensor([0,0], dtype=torch.float32)
-        stock_results = torch.zeros((16, 3)).to(device)
+        stock_results = torch.zeros((len(MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS), 3)).to(device)
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
