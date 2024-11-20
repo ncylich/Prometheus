@@ -174,7 +174,6 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         model.train()
         epoch_loss = 0
         for i, (x, y, t, gt_seq) in enumerate(train_loader):
-            break
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
