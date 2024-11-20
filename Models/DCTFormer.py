@@ -1,6 +1,6 @@
 import sys
 if 'google.colab' in sys.modules:
-    from Prometheus.Train.train_somoformer import train_model, get_data_loaders
+    from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
 else:
     from Train.train_somoformer import train_model, get_original_data_loaders
 
