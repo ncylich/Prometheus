@@ -165,9 +165,9 @@ def correct_ups_and_downs(forecast, actual, input_size):
     correct_overall = torch.sum(torch.sign(forecast_deltas) == torch.sign(actual_deltas), dim=1) / actual_deltas.size(-1)
 
     # Handle NaNs
-    correct_ups = correct_ups.nan_to_num(nan=0)
-    correct_downs = correct_downs.nan_to_num(nan=0)
-    correct_overall = correct_overall.nan_to_num(nan=0)
+    correct_ups = correct_ups.nan_to_num(nan=0, posinf=0, neginf=0)
+    correct_downs = correct_downs.nan_to_num(nan=0, posinf=0, neginf=0)
+    correct_overall = correct_overall.nan_to_num(nan=0, posinf=0, neginf=0)
 
     return torch.stack((correct_ups, correct_downs, correct_overall), dim=1)  # create 16x3 result tensor
 
