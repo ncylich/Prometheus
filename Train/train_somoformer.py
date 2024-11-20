@@ -265,7 +265,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             i, correct_ups, correct_downs, correct_overall, f1 = stock
             print(f'{MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS[i]}:')
             print(f'Correct Ups: {correct_ups}, Correct Downs: {stock[1]},')
-            print(f'Correct Overall: {correct_overall}, F1 Score: {f1}')
+            print(f'Correct Overall: {correct_overall}, F1 Score: {f1}\n')
 
         sleep(1e-5)
 
