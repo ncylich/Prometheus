@@ -179,6 +179,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             optimizer.step()
             epoch_loss += loss.item()
             if (i + 1) % 5 == 0:
+                if (i + 1) == 5:
+                    print()  # new line for first output
                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
