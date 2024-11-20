@@ -160,9 +160,9 @@ def correct_ups_and_downs(forecast, actual, input_size):
     forecast_deltas = forecast_end - forecast_start
     actual_deltas = actual_end - actual_start
 
-    correct_ups = torch.sum((forecast_deltas > 0) & (actual_deltas > 0)) / torch.sum(actual_deltas > 0, dim=1)
-    correct_downs = torch.sum((forecast_deltas < 0) & (actual_deltas < 0)) / torch.sum(actual_deltas < 0, dim=1)
-    correct_overall = torch.sum(torch.sign(forecast_deltas) == torch.sign(actual_deltas), dim=1) / len(actual_deltas)
+    correct_ups = torch.sum((forecast_deltas > 0) & (actual_deltas > 0), dim=1) / torch.sum(actual_deltas > 0, dim=1)
+    correct_downs = torch.sum((forecast_deltas < 0) & (actual_deltas < 0), dim=1) / torch.sum(actual_deltas < 0, dim=1)
+    correct_overall = torch.sum(torch.sign(forecast_deltas) == torch.sign(actual_deltas), dim=1) / actual_deltas.size(-1)
 
     return torch.stack((correct_ups, correct_downs, correct_overall), dim=1)  # create 16x3 result tensor
 
@@ -174,6 +174,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         model.train()
         epoch_loss = 0
         for i, (x, y, t, gt_seq) in enumerate(train_loader):
+            break
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
