@@ -1,9 +1,3 @@
-import sys
-if 'google.colab' in sys.modules:
-    from Prometheus.DataCollection.Legacy_Models_and_Code.data_processing import test_train_split
-else:
-    from DataCollection.Legacy_Models_and_Code.data_processing import test_train_split
-
 from time import sleep
 import torch
 from torch.nn import functional as F
@@ -139,6 +133,11 @@ def plot_forecast_vs_actual(forecast, actual):
     # plt.plot(gt_seq, label='Ground Truth')
     plt.legend()
     plt.show()
+
+
+def test_train_split(df, test_size_ratio):
+    test_len = int(len(df) * test_size_ratio)
+    return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs):

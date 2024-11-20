@@ -122,11 +122,6 @@ def print_np_forecasts(input_data, actual, forecasts):
     plt.show()
 
 
-def test_train_split(df, test_size_ratio):
-    test_len = int(len(df) * test_size_ratio)
-    return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
-
-
 if __name__ == "__main__":
     # df_prepared = read_parquet_nixtla("aug16-2024-2yrs.parquet", smush_times=True, expected_expiry_dist=3)
     df_prepared = read_processed_parquet("aug16-2024-2yrs.parquet", expected_expiry_dist=-1)
