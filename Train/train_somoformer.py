@@ -120,8 +120,8 @@ class MultiStockClosingAndVolumeDataset(Dataset):
             y_prices.append(y_price)
             y_volumes.append(y_volume)
 
-        x = torch.stack(x_prices + x_volumes)  # Shape: [2, num_tickers, backcast_size]
-        y = torch.stack(y_prices + y_volumes)  # Shape: [2, num_tickers, backcast_size + forecast_size]
+        x = torch.stack(x_prices + x_volumes)  # Shape: [2 * num_tickers, backcast_size]
+        y = torch.stack(y_prices + y_volumes)  # Shape: [2 * num_tickers, backcast_size + forecast_size]
 
         time = self.times[idx + self.backcast_size]
 
@@ -147,6 +147,9 @@ def test_train_split(df, test_size_ratio):
 def correct_ups_and_downs(forecast, actual, input_size):
     forecast = forecast.permute(1, 0, 2)
     actual = actual.permute(1, 0, 2)
+
+    forecast = forecast[: len(MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS)]
+    actual = actual[: len(MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS)]
 
     forecast_end = forecast[:, :, -1]
     actual_end = actual[:, :, -1]
@@ -265,7 +268,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         for stock in stock_results:
             i, correct_ups, correct_downs, correct_overall, f1 = stock
             print(f'{MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS[i]}:')
-            print(f'Correct Ups: {correct_ups}, Correct Downs: {stock[1]},')
+            print(f'Correct Ups: {correct_ups}, Correct Downs: {correct_downs},')
             print(f'Correct Overall: {correct_overall}, F1 Score: {f1}\n')
 
         sleep(1e-5)
