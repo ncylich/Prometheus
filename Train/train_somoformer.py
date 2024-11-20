@@ -6,6 +6,7 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
+import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -146,7 +147,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
     for epoch in tqdm(range(epochs)):
         model.train()
         epoch_loss = 0
-        for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
+        for i, (x, y, t, gt_seq) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
@@ -160,13 +161,19 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
         scheduler.step(epoch_loss)
 
+        num_example_plots = 20
+        if num_example_plots > len(test_loader):
+            plot_idxs = set(range(len(test_loader)))
+        else:
+            plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
+
         test_losses = torch.tensor([0,0], dtype=torch.float32)
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
         total_correct_overall = 0
         with torch.no_grad():
-            for x, y, t, gt_seq in test_loader:
+            for i, (x, y, t, gt_seq) in enumerate(test_loader):
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
                 # try:
@@ -194,8 +201,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1) - y[:, x.size()[-1] - 1].unsqueeze(1)
 
                 # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
-
-                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
+                if i in plot_idxs:
+                    plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
                 sign_truth = torch.sign(y[:, -1] - y[:, x.size()[-1]])
@@ -231,7 +238,7 @@ def train_model_split(model, train_loader, test_loader, criterion, optimizer, sc
     for epoch in tqdm(range(epochs)):
         model.train()
         epoch_loss = 0
-        for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
+        for i, (x, y, t, gt_seq) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
@@ -252,7 +259,7 @@ def train_model_split(model, train_loader, test_loader, criterion, optimizer, sc
         total_correct_overall = 0
         total_loss = 0.0
         with torch.no_grad():
-            for x, y, t, gt_seq in test_loader:
+            for i, (x, y, t, gt_seq) in enumerate(test_loader):
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
                 total_loss += criterion(output, y).item()
@@ -281,7 +288,6 @@ def train_model_split(model, train_loader, test_loader, criterion, optimizer, sc
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
 
                 # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
-
                 plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
