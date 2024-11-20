@@ -240,7 +240,7 @@ def main(config_path: str = ''):
         # plt.legend()
         # plt.show()
 
-        return (1 - diff_aux_loss) * F.mse_loss(y_pred, y_true) + diff_aux_loss * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        return (1 - config.aux_loss_weight) * F.mse_loss(y_pred, y_true) + config.aux_loss_weight * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
