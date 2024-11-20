@@ -212,7 +212,9 @@ def main(config_path: str = ''):
                        device=str(device)).to(device)
 
     optimizer = AdamW(model.parameters(), lr=config.lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
+
+    patience = max(1, math.floor(math.log(config.epochs, math.e))) # floor of ln(epochs) and at least 1
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=patience)
 
     def loss_function(y_pred, y_true):
         if config.aux_loss_weight <= 0:
