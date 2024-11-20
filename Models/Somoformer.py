@@ -1,4 +1,3 @@
-from torchvision.ops.misc import interpolate
 import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
@@ -91,7 +90,7 @@ class TriplePositionalEncoding(nn.Module):
 
 class Somoformer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
-                 activation='gelu', init_weight_magnitude = 1e-3, device='cuda:0', feature_types=2, n_tickers=8, max_time_steps=24):
+                 activation='gelu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2, n_tickers=8, max_time_steps=24):
         super(Somoformer, self).__init__()
 
         self.seq_len = seq_len

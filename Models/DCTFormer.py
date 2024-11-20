@@ -1,14 +1,16 @@
 import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
+    from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
 else:
-    from Train.train_somoformer import train_model, get_original_data_loaders
+    from Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
+    from Models.load_config import dynamic_load_config, update_config_with_factor
 
 from torchvision.ops.misc import interpolate
 from enum import Enum
 import torch
 from torch import nn
-from torch.nn import L1Loss, MSELoss
+from torch.nn import L1Loss, MSELoss, init
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
@@ -126,7 +128,7 @@ class TriplePositionalEncoding(nn.Module):
 
 class DCTFormer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
-                 activation='relu', device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
+                 activation='relu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2, n_tickers=7, max_time_steps=24, dct_n=108):
         super(DCTFormer, self).__init__()
 
         self.seq_len = seq_len
@@ -160,6 +162,20 @@ class DCTFormer(nn.Module):
                                                    dropout=dropout,
                                                    activation=activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
+
+        self.init_weight_magnitude = init_weight_magnitude
+        self.apply(self.init_weights)  # Key to properly working
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # init.xavier_uniform_(m.weight)  # Xavier  # +/- sqrt(features)
+            # init.zeros_(m.weight)  # Zeros
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
+            if m.bias is not None:
+                init.zeros_(m.bias)
+                # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
+        elif isinstance(m, nn.Embedding):
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
 
     def dct_forward(self, x):
         """
@@ -226,6 +242,7 @@ class DCTFormer(nn.Module):
 
 def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
+    config = update_config_with_factor(config)
 
     data_loader, test_loader = get_original_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
                                                          batch_size=config.batch_size, dataset_col=config.test_col)
@@ -237,25 +254,40 @@ def main(config_path: str = ''):
                       dim_feedfwd=config.dim_feedfwd,
                       nlayers=config.nlayers,
                       dropout=config.dropout,
+                      init_weight_magnitude = config.init_weight_magnitude,
                       device=str(device)).to(device)
 
     optimizer = AdamW(model.parameters(), lr=config.lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1)
+    patience = max(1, math.floor(math.log(config.epochs, math.e)))  # floor of ln(epochs) and at least 1
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=patience)
 
     def loss_function(y_pred, y_true):
+        if config.aux_loss_weight <= 0:
+            return F.mse_loss(y_pred, y_true)
+
         # y_true: [batch_size, V, F]
         # print(y_pred.shape, y_true.shape)
         # recon_velocities = model.dct_backward(y_pred)[..., -forecast_size:]
         # y_forecast = y_true[..., -forecast_size:]
         # calculating difference in summed_velocities
         summed_true = y_true[..., -config.forecast_size:].sum(dim=-1)
-        summed_pred = model.dct_backward(y_pred)[..., -config.forecast_size:].sum(dim=-1)
+        summed_pred = y_pred[..., -config.forecast_size:].sum(dim=-1)
 
-        # squared difference in sigmoid, simplest
-        # aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+        #full_sum = y_pred.sum(dim=-1)
+        #Zero_sum = torch.zeros_like(full_sum)
 
-        dct_true = model.dct_forward(y_true)
-        return F.mse_loss(y_pred, dct_true) #+ 0.2 * aux_loss # + 0.3 * F.mse_loss(recon_velocities, y_forecast)
+        # squared difference in sigmoid
+        diff_aux_loss = F.mse_loss(torch.sigmoid(summed_pred), torch.sigmoid(summed_true))
+
+        #zero_dist_aux_loss = F.mse_loss(full_sum, Zero_sum)
+
+        # plt.figure(figsize=(9, 6))
+        # plt.plot(y_pred[0][0].clone().detach().cpu(), label='Forecast')
+        # plt.plot(y_true[0][0].clone().detach().cpu(), label='Actual')
+        # plt.legend()
+        # plt.show()
+
+        return (1 - config.aux_loss_weight) * F.mse_loss(y_pred, y_true) + config.aux_loss_weight * diff_aux_loss #+ 0.2 * zero_dist_aux_loss #+ 0.3 * F.mse_loss(recon_velocities, y_forecast)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
