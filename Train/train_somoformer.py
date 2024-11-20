@@ -259,7 +259,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             return 2 * correct_ups * correct_downs / (correct_ups + correct_downs)
         stock_results = [[i, correct_ups, correct_downs, correct_overall, get_f1(correct_ups, correct_downs)]
                          for i, (correct_ups, correct_downs, correct_overall) in enumerate(stock_results.cpu().tolist())]
-        stock_results = sorted(stock_results, key=lambda x: x[1][-1], reverse=True)  # sort by highest overall correct
+        stock_results = sorted(stock_results, key=lambda x: x[-2], reverse=True)  # sort by highest overall correct
         for stock in stock_results:
             i, correct_ups, correct_downs, correct_overall, f1 = stock
             print(f'{MultiStockClosingAndVolumeDataset.IDX_TO_TICKERS[i]}:')
