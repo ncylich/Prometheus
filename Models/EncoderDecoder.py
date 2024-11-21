@@ -92,8 +92,9 @@ class PositionalEncoding(nn.Module):
         # make embeddings relatively larger
         x = x * math.sqrt(self.embed_dim)
         # add constant to embedding
-        seq_len = x.size(1)
-        x = x + torch.autograd.Variable(self.pe[:, :seq_len], requires_grad=False)
+        seq_len = x.size(0)
+        # print(x.shape, self.pe[:, :seq_len].shape)
+        x = x + torch.autograd.Variable(self.pe[:, :seq_len], requires_grad=False).permute(1, 0, 2)
         return x
 
 class EncoderDecoder(nn.Module):
@@ -189,3 +190,6 @@ def main(config_path: str = ''):
         return F.mse_loss(y_pred, y_true)
 
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
+
+if __name__ == '__main__':
+    main()
