@@ -273,7 +273,7 @@ def get_original_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, 
     return data_dataloader, test_dataloader
 
 def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
-                        dataset_path='Prometheus/DataCollection/long_term_data/5min_long_term_merged_UNadjusted.parquet'):
+                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet'):
     path_dirs = os.getcwd().split('/')[::-1]
     try:
         prometheus_idx = path_dirs.index('Prometheus')
