@@ -127,7 +127,7 @@ class TriplePositionalEncoding(nn.Module):
 
 class DCTFormer(nn.Module):
     def __init__(self, seq_len, forecast_size, nhid=256, nhead=8, dim_feedfwd=1024, nlayers=6, dropout=0.1,
-                 activation='relu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2, n_tickers=8, max_time_steps=24, dct_n=108):
+                 activation='gelu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2, n_tickers=8, max_time_steps=24, dct_n=108):
         super(DCTFormer, self).__init__()
 
         self.seq_len = seq_len
