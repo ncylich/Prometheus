@@ -12,7 +12,7 @@ batch_size: 4096
 test_col: "close"
 
 lr: 2e-4
-epochs: 100
+epochs: 20
 init_weight_magnitud: 1e-2
 
 aux_loss_weight: 0
