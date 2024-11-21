@@ -21,7 +21,6 @@ import numpy as np
 import math
 import torch.nn.functional as F
 from dataclasses import dataclass
-from load_config import dynamic_load_config
 # import torch_dct as dct
 # from utils.dct import get_dct_matrix
 
@@ -43,7 +42,7 @@ class Config:
 
     lr: float = 2e-4
     epochs: int = 100
-    init_weight_magnitud: float = 1e-3
+    init_weight_magnitude: float = 1e-2
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
