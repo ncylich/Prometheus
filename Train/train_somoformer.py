@@ -193,7 +193,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
 
-        num_example_plots = 20
+        num_example_plots = 10
         if num_example_plots > len(test_loader):
             plot_idxs = set(range(len(test_loader)))
         else:
