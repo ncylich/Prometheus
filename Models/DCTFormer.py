@@ -36,7 +36,7 @@ class Config:
     nhead: int = 8
     dim_feedfwd: int = 512 * factor
     nlayers: int = 12
-    dropout: int = 0.1
+    dropout: float = 0.1
     batch_size: int = 1024
     test_col: str = 'close'
 
