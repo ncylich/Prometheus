@@ -259,7 +259,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
         sleep(1e-5)
-        print(f'Epoch loss: {total_loss/len(test_loader)}')
+        print(f'\nEpoch loss: {total_loss/len(test_loader)}')
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
 
         stock_results = stock_results / len(test_loader)
