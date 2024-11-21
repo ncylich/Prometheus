@@ -243,8 +243,11 @@ def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
     config = update_config_with_factor(config)
 
-    data_loader, test_loader = get_original_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
-                                                         batch_size=config.batch_size, dataset_col=config.test_col)
+    # data_loader, test_loader = get_original_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+    #                                                      batch_size=config.batch_size, dataset_col=config.test_col)
+
+    data_loader, test_loader = get_long_term_data_loaders(config.backcast_size, config.forecast_size, test_size_ratio=0.2,
+                                                          batch_size=config.batch_size, dataset_col=config.test_col)
 
     model = DCTFormer(config.seq_len,
                       config.forecast_size,
