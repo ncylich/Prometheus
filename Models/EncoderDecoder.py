@@ -46,7 +46,7 @@ class Config:
     epochs = 100
     init_weight_magnitude = 1e-3  # / (factor ** 2)
 
-    aux_loss_weight: float = 1
+    aux_loss_weight: float = 0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -99,7 +99,7 @@ class PositionalEncoding(nn.Module):
 class EncoderDecoder(nn.Module):
     def __init__(self, in_F, out_F, nhid=256, nhead=8, dim_feedfwd=1024, enc_layers=6, dec_layers=6, group_size=4,
                  dropout=0.1, activation='gelu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2,
-                 n_tickers=7, max_time_steps=5000):
+                 n_tickers=8, max_time_steps=24):
         super(EncoderDecoder, self).__init__()
 
         self.device = device
