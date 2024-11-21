@@ -149,7 +149,7 @@ class EncoderDecoder(nn.Module):
 
         # Decoder
         tgt = self.decoder_input_projection(tgt)  # [out_F, B, nhid]
-        tgt = self.pos_decoder(tgt, time_indices)
+        tgt = self.pos_decoder(tgt)
         output = self.decoder(tgt, memory)  # [out_F, B, nhid]
 
         # Output projection
