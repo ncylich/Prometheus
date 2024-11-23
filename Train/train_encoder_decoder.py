@@ -181,7 +181,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
-            y_reshape = y[:, 0].unsqueeze(2)
+            y_reshape = y[:, 0]
             assert y_reshape.shape == forecast.shape
             loss = criterion(forecast, y_reshape)
             loss.backward()
@@ -223,7 +223,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 torch.cumsum(y, dim=-1, out=y)
 
                 # Squeezing to final point of input
-                forecast = forecast.squeeze(-1) + gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
+                forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
 
                 if i in plot_idxs:

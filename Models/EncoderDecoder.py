@@ -2,11 +2,9 @@ import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
-    from Prometheus.Models.Somoformer import TriplePositionalEncoding
 else:
     from Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Models.load_config import dynamic_load_config, update_config_with_factor
-    from Models.Somoformer import TriplePositionalEncoding
 
 from enum import Enum
 import torch
@@ -64,45 +62,125 @@ def get_dct_matrix(N):
     return dct_m, idct_m
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, max_seq_len, embed_model_dim):
+class TriplePositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, feature_types: int, n_tickers: int, max_time_steps: int = 24, dropout: float = 0.1, device='cuda:0'):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        self.device = device
+        self.feature_types = feature_types
+
+        # Embeddings for feature types (e.g., price and volume)
+        self.feature_type_encoding = nn.Embedding(feature_types, d_model // 3).to(device)
+        # Embeddings for time steps (e.g., hours of the day)
+        self.time_encoding = nn.Embedding(max_time_steps, d_model // 3).to(device)
+        # Embeddings for tickers
+        self.ticker_encoding = nn.Embedding(n_tickers, d_model // 3).to(device)
+
+    def forward(self, x: torch.Tensor, time_indices: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            seq_len: length of input sequence
-            embed_model_dim: demension of embedding
+            x: Tensor of shape [seq_len, batch_size, d_model]
+            time_indices: Tensor of shape [batch_size], indices of time steps
+        """
+        num_features, batch_size, d_model = x.size()
+        n_tickers = num_features // self.feature_types
+        third = x.size(2) // 3
+
+        # Add feature type encoding
+        x[:, :, 0:third*3:3] = x[:, :, 0:third*3:3] + self.feature_type_encoding(torch.arange(self.feature_types, device=self.device)).repeat_interleave(n_tickers, axis=0).unsqueeze(1)
+
+        # Add time encoding
+        x[:, :, 1:third*3:3] = x[:, :, 1:third*3:3] + self.time_encoding(time_indices.to(self.device)).unsqueeze(0)
+
+        # Add ticker encoding
+        x[:, :, 2:third*3:3] = x[:, :, 2:third*3:3] + self.ticker_encoding(torch.arange(n_tickers, device=self.device)).repeat(self.feature_types, 1).unsqueeze(1)
+
+        return self.dropout(x)
+
+
+# class PositionalEncoding(nn.Module):
+#     def __init__(self, max_seq_len, embed_model_dim):
+#         """
+#         Args:
+#             seq_len: length of input sequence
+#             embed_model_dim: demension of embedding
+#         """
+#         super(PositionalEncoding, self).__init__()
+#         self.embed_dim = embed_model_dim
+#
+#         pe = torch.zeros(max_seq_len, self.embed_dim)
+#         for pos in range(max_seq_len):
+#             for i in range(0, self.embed_dim, 2):
+#                 theta = 10000 ** (i / self.embed_dim)
+#                 pe[pos, i] = math.sin(theta)
+#                 pe[pos, i + 1] = math.cos(theta)
+#         pe = pe.unsqueeze(0)
+#         self.register_buffer('pe', pe)
+#
+#     def forward(self, x):
+#         """
+#         Args:
+#             x: input vector
+#         Returns:
+#             x: output
+#         """
+#
+#         # make embeddings relatively larger
+#         x = x * math.sqrt(self.embed_dim)
+#         # add constant to embedding
+#         seq_len = x.size(0)
+#         # print(x.shape, self.pe[:, :seq_len].shape)
+#         x = x + torch.autograd.Variable(self.pe[:, :seq_len], requires_grad=False).permute(1, 0, 2)
+#         return x
+
+class PositionalEncoding(nn.Module):
+    """
+    compute sinusoid encoding.
+    """
+    def __init__(self, d_model, max_len, device):
+        """
+        constructor of sinusoid encoding class
+
+        :param d_model: dimension of model
+        :param max_len: max sequence length
+        :param device: hardware device setting
         """
         super(PositionalEncoding, self).__init__()
-        self.embed_dim = embed_model_dim
 
-        pe = torch.zeros(max_seq_len, self.embed_dim)
-        for pos in range(max_seq_len):
-            for i in range(0, self.embed_dim, 2):
-                pe[pos, i] = math.sin(pos / (10000 ** ((2 * i) / self.embed_dim)))
-                pe[pos, i + 1] = math.cos(pos / (10000 ** ((2 * (i + 1)) / self.embed_dim)))
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
+        # same size with input matrix (for adding with input matrix)
+        self.encoding = torch.zeros(max_len, d_model, device=device)
+        self.encoding.requires_grad = False  # we don't need to compute gradient
+
+        pos = torch.arange(0, max_len, device=device)
+        pos = pos.float().unsqueeze(dim=1)
+        # 1D => 2D unsqueeze to represent word's position
+
+        _2i = torch.arange(0, d_model, step=2, device=device).float()
+        # 'i' means index of d_model (e.g. embedding size = 50, 'i' = [0,50])
+        # "step=2" means 'i' multiplied with two (same with 2 * i)
+
+        self.encoding[:, 0::2] = torch.sin(pos / (10000 ** (_2i / d_model)))
+        self.encoding[:, 1::2] = torch.cos(pos / (10000 ** (_2i / d_model)))
+        # compute positional encoding to consider positional information of words
 
     def forward(self, x):
-        """
-        Args:
-            x: input vector
-        Returns:
-            x: output
-        """
+        # self.encoding
+        # [max_len = 512, d_model = 512]
 
-        # make embeddings relatively larger
-        x = x * math.sqrt(self.embed_dim)
-        # add constant to embedding
-        seq_len = x.size(0)
-        # print(x.shape, self.pe[:, :seq_len].shape)
-        x = x + torch.autograd.Variable(self.pe[:, :seq_len], requires_grad=False).permute(1, 0, 2)
-        return x
+        batch_size, seq_len = x.size()
+        # [batch_size = 128, seq_len = 30]
+
+        return self.encoding[:seq_len, :]
+        # [seq_len = 30, d_model = 512]
+        # it will add with tok_emb : [128, 30, 512]
 
 class EncoderDecoder(nn.Module):
     def __init__(self, in_F, out_F, nhid=256, nhead=8, dim_feedfwd=1024, enc_layers=6, dec_layers=6, group_size=4,
                  dropout=0.1, activation='gelu', init_weight_magnitude = 1e-2, device='cuda:0', feature_types=2,
                  n_tickers=8, max_time_steps=24):
         super(EncoderDecoder, self).__init__()
+
+        assert in_F % group_size == 0, f"group size, {group_size}, must divide forecast size, {in_F}"
 
         self.device = device
         self.in_F = in_F
@@ -121,7 +199,7 @@ class EncoderDecoder(nn.Module):
             dropout=dropout,
             device=device
         )
-        self.pos_decoder = PositionalEncoding(max_seq_len=out_F, embed_model_dim=nhid)
+        self.pos_decoder = PositionalEncoding(d_model=nhid, max_len=out_F // group_size, device=device)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=nhid, nhead=nhead, dim_feedforward=dim_feedfwd, dropout=dropout, activation=activation)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=enc_layers)
@@ -150,7 +228,7 @@ class EncoderDecoder(nn.Module):
             time_indices: Tensor of shape [B, seq_len]
         """
         if tgt is None:
-            tgt = torch.zeros(src.size(0), self.out_F, self.group_size).to(self.device)
+            tgt = torch.zeros(src.size(0), self.out_F // self.group_size, self.group_size).to(self.device)
 
         src = src.transpose(0, 1)  # [V, B, in_F]
         tgt = tgt.transpose(0, 1) # [out_F, B, X]
@@ -170,6 +248,7 @@ class EncoderDecoder(nn.Module):
         # Output projection
         output = self.output_projection(output)  # [out_F, B, X]
         output = output.permute(1, 0, 2)  # [B, out_F, X]
+        output = output.reshape(B, out_F * X)
 
         return output
 
@@ -206,4 +285,4 @@ def main(config_path: str = ''):
     train_model(model, data_loader, test_loader, loss_function, optimizer, scheduler, config.epochs)
 
 if __name__ == '__main__':
-    main()
+    main('configs/encoder_decoder_config.yaml')
