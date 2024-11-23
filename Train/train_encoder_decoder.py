@@ -157,7 +157,7 @@ def train_model_together(model, train_loader, test_loader, criterion, optimizer,
 
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
-        scheduler.step(test_losses[0])  # only use MAE loss for scheduler
+        scheduler.step(test_losses[1])  # only use MSE loss for scheduler
 
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
@@ -177,7 +177,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
     for epoch in tqdm(range(epochs)):
         model.train()
         epoch_loss = 0
-        for (i, (x, y, t, gt_seq)) in enumerate(train_loader):
+        for i, (x, y, t, gt_seq) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
             forecast = model(x, t)
@@ -226,7 +226,6 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 forecast = forecast.squeeze(-1) + gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
 
-                # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
                 if i in plot_idxs:
                     plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
@@ -240,12 +239,9 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 total_correct_downs += correct_downs
                 total_correct_overall += correct_overall
 
-                forecast = forecast[:, -model.in_F:]
-                y = y[:, -model.in_F:]
-
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
-        scheduler.step(test_losses[0])  # only use MAE loss for scheduler
+        scheduler.step(test_losses[1])  # only use MSE loss for scheduler
 
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')

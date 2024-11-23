@@ -50,6 +50,7 @@ class Config:
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def get_dct_matrix(N):
     """Calculates DCT Matrix of size N."""
     dct_m = np.eye(N)
@@ -129,18 +130,17 @@ class EncoderDecoder(nn.Module):
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=dec_layers)
 
         self.init_weight_magnitude = init_weight_magnitude
-        # self.apply(self.init_weights)
+        self.apply(self.init_weights)
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            # init.xavier_uniform_(m.weight)  # Xavier  # +/- sqrt(features)
-            # init.zeros_(m.weight)  # Zeros
-            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
+            nn.init.uniform_(m.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
             if m.bias is not None:
-                init.zeros_(m.bias)
-                # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
-        elif isinstance(m, nn.Embedding):
-            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.TransformerEncoderLayer) or isinstance(m, nn.TransformerDecoderLayer):
+            for param in m.parameters():
+                if param.dim() > 1:
+                    nn.init.xavier_uniform_(param)
 
     def forward(self, src, time_indices, tgt=None):
         """
