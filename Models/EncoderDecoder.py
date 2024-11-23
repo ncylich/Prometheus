@@ -1,7 +1,4 @@
 import sys
-
-from ray.tune.examples.pbt_dcgan_mnist.common import batch_size
-
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
