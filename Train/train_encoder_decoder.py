@@ -263,13 +263,15 @@ def mae_and_mse_loss(forecast, actual):
     return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 
-def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, x_min=5, test_size_ratio=.2, batch_size=512, dataset_col='close'):
+def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, x_min=5, test_size_ratio=.2, batch_size=512,
+                                    dataset_col='close', truncate_data=True):
     dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
-    return get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio, batch_size, dataset_col, dataset_path)
+    return get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio, batch_size, dataset_col,
+                                      dataset_path, truncate_data)
 
 
 def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
-                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet'):
+                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', truncate_data=True):
     path_dirs = os.getcwd().split('/')[::-1]
     try:
         prometheus_idx = path_dirs.index('Prometheus')
@@ -279,7 +281,8 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
     data = pd.read_parquet(dataset_path)
 
     # truncate data to 100k items
-    data = data[:100000]
+    if truncate_data:
+        data = data[:100000]
 
     train_data, test_data = test_train_split(data, test_size_ratio)
 
