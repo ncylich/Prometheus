@@ -6,6 +6,8 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
+import random
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -62,6 +64,7 @@ class MultiStockClosingAndVolumeDataset(Dataset):
     def calculate_velocity(self, data):
         return data[1:] - data[:-1]
 
+
 def plot_forecast_vs_actual(forecast, actual):
     plt.figure(figsize=(9, 6))
     plt.plot(forecast, label='Forecast')
@@ -96,13 +99,19 @@ def train_model_together(model, train_loader, test_loader, criterion, optimizer,
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
         scheduler.step(epoch_loss)
 
+        num_example_plots = 10
+        if num_example_plots > len(test_loader):
+            plot_idxs = set(range(len(test_loader)))
+        else:
+            plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
+
         test_losses = torch.tensor([0,0], dtype=torch.float32)
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
         total_correct_overall = 0
         with torch.no_grad():
-            for x, y, t, gt_seq in test_loader:
+            for i, (x, y, t, gt_seq) in enumerate(test_loader):
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
                 # try:
@@ -130,8 +139,8 @@ def train_model_together(model, train_loader, test_loader, criterion, optimizer,
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1) - y[:, x.size()[-1] - 1].unsqueeze(1)
 
                 # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
-
-                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
+                if i in plot_idxs:
+                    plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
                 sign_truth = torch.sign(y[:, -1] - y[:, x.size()[-1]])
@@ -183,13 +192,19 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
         scheduler.step(epoch_loss)
 
+        num_example_plots = 10
+        if num_example_plots > len(test_loader):
+            plot_idxs = set(range(len(test_loader)))
+        else:
+            plot_idxs = set(random.sample(range(len(test_loader)), num_example_plots))
+
         test_losses = torch.tensor([0,0], dtype=torch.float32)
         model.eval()
         total_correct_ups = 0
         total_correct_downs = 0
         total_correct_overall = 0
         with torch.no_grad():
-            for x, y, t, gt_seq in test_loader:
+            for i, (x, y, t, gt_seq) in enumerate(test_loader):
                 x, t = x.to(device), t.to(device)
                 output = model(x, t)
 
@@ -208,12 +223,12 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 torch.cumsum(y, dim=-1, out=y)
 
                 # Squeezing to final point of input
-                forecast += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
+                forecast = forecast.squeeze(-1) + gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
                 y += gt_seq[:, x.size()[-1] - 1].unsqueeze(1)
 
                 # forecast += y[:, x.size()[-1]].unsqueeze(1) - forecast[:, x.size()[-1]].unsqueeze(1)
-
-                plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
+                if i in plot_idxs:
+                    plot_forecast_vs_actual(forecast[0].cpu(), y[0].cpu())
 
                 # calculate percentage of correct ups, correct downs, and correct overall
                 sign_truth = torch.sign(y[:, -1] - y[:, 0])
@@ -225,9 +240,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 total_correct_downs += correct_downs
                 total_correct_overall += correct_overall
 
-                forecast = forecast[:, -model.forecast_size:]
-                y = y[:, -model.forecast_size:]
-
+                forecast = forecast[:, -model.in_F:]
+                y = y[:, -model.in_F:]
 
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
@@ -247,30 +261,10 @@ def mae_and_mse_loss(forecast, actual):
     return torch.tensor([F.l1_loss(forecast, actual), F.mse_loss(forecast, actual)])
 
 
-def get_original_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512,
-                              dataset_path='Prometheus/DataCollection/20241111_merged_squeezed.csv', dataset_col='close'):
+def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, x_min=5, test_size_ratio=.2, batch_size=512, dataset_col='close'):
+    dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
+    return get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio, batch_size, dataset_col, dataset_path)
 
-    # Updating data path dynamically on dir
-    path_dirs = os.getcwd().split('/')[::-1]
-    try:
-        prometheus_idx = path_dirs.index('Prometheus')
-    except ValueError:
-        prometheus_idx = -1
-    dataset_path = '../' * (prometheus_idx + 1) + dataset_path
-
-    data = pd.read_csv(dataset_path)
-    data = data[data['expiry-dist'] == 2]  # Only considering 3-month futures
-    data = data.drop_duplicates(subset=['date', 'expiry-dist', 'expiry'], keep='first')
-    train_data, test_data = test_train_split(data, test_size_ratio)
-
-    mean_std_path = 'mean_std.pth'  # Path to save/load mean and std
-
-    CrudeDataset = MultiStockClosingAndVolumeDataset
-    train_dataset = CrudeDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col)
-    test_dataset = CrudeDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col)
-    data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
-    return data_dataloader, test_dataloader
 
 def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
                         dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet'):

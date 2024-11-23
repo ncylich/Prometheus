@@ -1,10 +1,10 @@
 import sys
 if 'google.colab' in sys.modules:
-    from Prometheus.Train.train_encoder_decoder import train_model, get_original_data_loaders, get_long_term_data_loaders
+    from Prometheus.Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
     from Prometheus.Models.Somoformer import TriplePositionalEncoding
 else:
-    from Train.train_encoder_decoder import train_model, get_original_data_loaders, get_long_term_data_loaders
+    from Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Models.load_config import dynamic_load_config, update_config_with_factor
     from Models.Somoformer import TriplePositionalEncoding
 
@@ -127,6 +127,20 @@ class EncoderDecoder(nn.Module):
 
         decoder_layer = nn.TransformerDecoderLayer(d_model=nhid, nhead=nhead, dim_feedforward=dim_feedfwd, dropout=dropout, activation=activation)
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=dec_layers)
+
+        self.init_weight_magnitude = init_weight_magnitude
+        # self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # init.xavier_uniform_(m.weight)  # Xavier  # +/- sqrt(features)
+            # init.zeros_(m.weight)  # Zeros
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
+            if m.bias is not None:
+                init.zeros_(m.bias)
+                # init.normal_(m.bias, mean=0, std=init_weight_magnitude)
+        elif isinstance(m, nn.Embedding):
+            init.normal_(m.weight, mean=0, std=self.init_weight_magnitude)
 
     def forward(self, src, time_indices, tgt=None):
         """
