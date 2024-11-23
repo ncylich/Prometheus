@@ -15,6 +15,6 @@ test_col: "close"
 
 lr: 1e-3
 epochs: 100
-init_weight_magnitude: 1e0
+init_weight_magnitude: 1e-1
 
 aux_loss_weight: 0

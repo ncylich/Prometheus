@@ -1,4 +1,7 @@
 import sys
+
+from ray.tune.examples.pbt_dcgan_mnist.common import batch_size
+
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_encoder_decoder import train_model, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
@@ -97,43 +100,7 @@ class TriplePositionalEncoding(nn.Module):
 
         return self.dropout(x)
 
-
-# class PositionalEncoding(nn.Module):
-#     def __init__(self, max_seq_len, embed_model_dim):
-#         """
-#         Args:
-#             seq_len: length of input sequence
-#             embed_model_dim: demension of embedding
-#         """
-#         super(PositionalEncoding, self).__init__()
-#         self.embed_dim = embed_model_dim
-#
-#         pe = torch.zeros(max_seq_len, self.embed_dim)
-#         for pos in range(max_seq_len):
-#             for i in range(0, self.embed_dim, 2):
-#                 theta = 10000 ** (i / self.embed_dim)
-#                 pe[pos, i] = math.sin(theta)
-#                 pe[pos, i + 1] = math.cos(theta)
-#         pe = pe.unsqueeze(0)
-#         self.register_buffer('pe', pe)
-#
-#     def forward(self, x):
-#         """
-#         Args:
-#             x: input vector
-#         Returns:
-#             x: output
-#         """
-#
-#         # make embeddings relatively larger
-#         x = x * math.sqrt(self.embed_dim)
-#         # add constant to embedding
-#         seq_len = x.size(0)
-#         # print(x.shape, self.pe[:, :seq_len].shape)
-#         x = x + torch.autograd.Variable(self.pe[:, :seq_len], requires_grad=False).permute(1, 0, 2)
-#         return x
-
-class PositionalEncoding(nn.Module):
+class SinusoidalPositionalEncoding(nn.Module):
     """
     compute sinusoid encoding.
     """
@@ -145,7 +112,7 @@ class PositionalEncoding(nn.Module):
         :param max_len: max sequence length
         :param device: hardware device setting
         """
-        super(PositionalEncoding, self).__init__()
+        super(SinusoidalPositionalEncoding, self).__init__()
 
         # same size with input matrix (for adding with input matrix)
         self.encoding = torch.zeros(max_len, d_model, device=device)
@@ -167,12 +134,22 @@ class PositionalEncoding(nn.Module):
         # self.encoding
         # [max_len = 512, d_model = 512]
 
-        batch_size, seq_len, nhid = x.size()
+        batch_size, seq_len, d_model = x.size()
         # [batch_size = 128, seq_len = 30]
 
         return x + self.encoding[:seq_len, :]
         # [seq_len = 30, d_model = 512]
         # it will add with tok_emb : [128, 30, 512]
+
+class StaticPositionalEmbedding(nn.Module):
+    def __init__(self, d_model: int, max_len: int, device='cuda:0'):
+        super().__init__()
+        self.pe = nn.Embedding(max_len, d_model).to(device)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, d_model = x.size()
+        pos = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
+        return x + self.pe(pos)
 
 class EncoderDecoder(nn.Module):
     def __init__(self, in_F, out_F, nhid=256, nhead=8, dim_feedfwd=1024, enc_layers=6, dec_layers=6, group_size=4,
@@ -199,7 +176,8 @@ class EncoderDecoder(nn.Module):
             dropout=dropout,
             device=device
         )
-        self.pos_decoder = PositionalEncoding(d_model=nhid, max_len=out_F // group_size, device=device)
+        # self.pos_decoder = SinusoidalPositionalEncoding(d_model=nhid, max_len=out_F // group_size, device=device)
+        self.pos_decoder = StaticPositionalEmbedding(d_model=nhid, max_len=out_F // group_size, device=device)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=nhid, nhead=nhead, dim_feedforward=dim_feedfwd, dropout=dropout, activation=activation)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=enc_layers)
@@ -215,6 +193,8 @@ class EncoderDecoder(nn.Module):
             nn.init.uniform_(m.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.Embedding):
+            nn.init.uniform_(m.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
         elif isinstance(m, nn.TransformerEncoderLayer) or isinstance(m, nn.TransformerDecoderLayer):
             for param in m.parameters():
                 if param.dim() > 1:
