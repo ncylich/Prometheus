@@ -1,13 +1,13 @@
 forecast_size: 36
 backcast_size: 72
 
-factor: 2
+factor: 1
 seq_len: 108  # forecast_size + backcast_size
 nhid: 128   # 128 * factor
 nhead: 8
 dim_feedfwd: 512   # 512 * factor
-n_enc_layers: 12
-n_dec_layers: 12
+n_enc_layers: 6
+n_dec_layers: 6
 n_values_per_group: 1
 dropout: 0.1
 batch_size: 2048
@@ -15,6 +15,6 @@ test_col: "close"
 
 lr: 1e-3
 epochs: 100
-init_weight_magnitude: 1e-2
+init_weight_magnitude: 1e0
 
 aux_loss_weight: 0
