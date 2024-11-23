@@ -167,10 +167,10 @@ class PositionalEncoding(nn.Module):
         # self.encoding
         # [max_len = 512, d_model = 512]
 
-        batch_size, seq_len = x.size()
+        batch_size, seq_len, nhid = x.size()
         # [batch_size = 128, seq_len = 30]
 
-        return self.encoding[:seq_len, :]
+        return x + self.encoding[:seq_len, :]
         # [seq_len = 30, d_model = 512]
         # it will add with tok_emb : [128, 30, 512]
 
@@ -230,24 +230,21 @@ class EncoderDecoder(nn.Module):
         if tgt is None:
             tgt = torch.zeros(src.size(0), self.out_F // self.group_size, self.group_size).to(self.device)
 
-        src = src.transpose(0, 1)  # [V, B, in_F]
-        tgt = tgt.transpose(0, 1) # [out_F, B, X]
-        V, B, in_F = src.size()
-        out_F, B, X = tgt.size()
-
         # Encoder
+        src = src.transpose(0, 1)  # [V, B, in_F]
         src = self.encoder_input_projection(src)  # [V, B, nhid]
         src = self.pos_encoder(src, time_indices)
         memory = self.encoder(src)  # [V, B, nhid]
 
         # Decoder
         tgt = self.decoder_input_projection(tgt)  # [out_F, B, nhid]
-        tgt = self.pos_decoder(tgt)
+        tgt = self.pos_decoder(tgt).transpose(0, 1)  # [out_F, B, nhid]
         output = self.decoder(tgt, memory)  # [out_F, B, nhid]
 
         # Output projection
         output = self.output_projection(output)  # [out_F, B, X]
         output = output.permute(1, 0, 2)  # [B, out_F, X]
+        B, out_F, X = output.size()
         output = output.reshape(B, out_F * X)
 
         return output
