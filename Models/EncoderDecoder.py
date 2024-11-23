@@ -197,6 +197,7 @@ class EncoderDecoder(nn.Module):
                 if param.dim() > 1:
                     nn.init.xavier_uniform_(param)
 
+    # TODO: fixed decoder to produce 1-token at a time
     def forward(self, src, time_indices, tgt=None):
         """
         Args:
