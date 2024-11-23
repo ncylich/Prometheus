@@ -97,7 +97,6 @@ def train_model_together(model, train_loader, test_loader, criterion, optimizer,
                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
-        scheduler.step(epoch_loss)
 
         num_example_plots = 10
         if num_example_plots > len(test_loader):
@@ -158,6 +157,8 @@ def train_model_together(model, train_loader, test_loader, criterion, optimizer,
 
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
+        scheduler.step(test_losses[0])  # only use MAE loss for scheduler
+
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         correct_ups = total_correct_ups/len(test_loader)
@@ -190,7 +191,6 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
-        scheduler.step(epoch_loss)
 
         num_example_plots = 10
         if num_example_plots > len(test_loader):
@@ -245,6 +245,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
                 test_losses += mae_and_mse_loss(forecast, y)
         test_losses /= len(test_loader)
+        scheduler.step(test_losses[0])  # only use MAE loss for scheduler
+
         sleep(1e-5)
         print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         correct_ups = total_correct_ups/len(test_loader)
