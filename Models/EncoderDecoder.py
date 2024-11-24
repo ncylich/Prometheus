@@ -197,6 +197,9 @@ class EncoderDecoder(nn.Module):
                 if param.dim() > 1:
                     nn.init.xavier_uniform_(param)
 
+    def _generate_square_subsequent_mask(self, sz):
+        return torch.log(torch.tril(torch.ones(sz,sz)))
+
     # TODO: fixed decoder to produce 1-token at a time
     def forward(self, src, time_indices, tgt=None):
         """
@@ -207,6 +210,8 @@ class EncoderDecoder(nn.Module):
         """
         if tgt is None:
             tgt = torch.zeros(src.size(0), self.out_F // self.group_size, self.group_size).to(self.device)
+        else:
+            tgt = tgt[:, 0].reshape(-1, self.out_F // self.group_size, self.group_size)
 
         # Encoder
         src = src.transpose(0, 1)  # [V, B, in_F]
@@ -216,8 +221,10 @@ class EncoderDecoder(nn.Module):
 
         # Decoder
         tgt = self.decoder_input_projection(tgt)  # [out_F, B, nhid]
-        tgt = self.pos_decoder(tgt).transpose(0, 1)  # [out_F, B, nhid]
-        output = self.decoder(tgt, memory)  # [out_F, B, nhid]
+        tgt = self.pos_decoder(tgt) * math.sqrt(self.group_size)
+        tgt = tgt.transpose(0, 1)  # [out_F, B, nhid]
+        mask = self._generate_square_subsequent_mask(tgt.size(0)).to(self.device)
+        output = self.decoder(tgt, memory, tgt_mask=mask)  # [out_F, B, nhid]
 
         # Output projection
         output = self.output_projection(output)  # [out_F, B, X]

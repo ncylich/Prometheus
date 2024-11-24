@@ -8,7 +8,7 @@ nhead: 8
 dim_feedfwd: 512   # 512 * factor
 n_enc_layers: 12
 n_dec_layers: 12
-n_values_per_group: 6
+n_values_per_group: 4
 dropout: 0.1
 batch_size: 1024
 test_col: "close"

@@ -180,12 +180,16 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         for i, (x, y, t, gt_seq) in enumerate(train_loader):
             x, y, t = x.to(device), y.to(device), t.to(device)
             optimizer.zero_grad()
-            forecast = model(x, t)
+
+            tgt = torch.cat([torch.zeros(y.size(0), 1, y.size(2)).to(device), y[:, :-1, :]], dim=1)
+            forecast = model(x, t, tgt)
+
             y_reshape = y[:, 0]
             assert y_reshape.shape == forecast.shape
             loss = criterion(forecast, y_reshape)
             loss.backward()
             optimizer.step()
+
             epoch_loss += loss.item()
             if i % 5 == 0:
                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
@@ -205,8 +209,10 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         total_correct_overall = 0
         with torch.no_grad():
             for i, (x, y, t, gt_seq) in enumerate(test_loader):
-                x, t = x.to(device), t.to(device)
-                output = model(x, t)
+                x, y, t = x.to(device), y.to(device), t.to(device)
+                # TODO: Implement group size shifting
+                tgt = torch.cat([torch.zeros(y.size(0), model.group_size, y.size(2)).to(device), y[:, :-model.group_size, :]], dim=1)
+                output = model(x, t, tgt)
 
                 # scaling back to original values
                 y /= MultiStockClosingAndVolumeDataset.SCALE_VEL
