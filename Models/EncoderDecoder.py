@@ -192,15 +192,13 @@ class EncoderDecoder(nn.Module):
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Embedding):
             nn.init.uniform_(m.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
-        elif isinstance(m, StaticPositionalEmbedding):
-            nn.init.uniform_(m.pe.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
         elif isinstance(m, nn.TransformerEncoderLayer) or isinstance(m, nn.TransformerDecoderLayer):
             for param in m.parameters():
                 if param.dim() > 1:
                     nn.init.xavier_uniform_(param)
 
     def _generate_square_subsequent_mask(self, sz):
-        return torch.log(torch.tril(torch.ones(sz,sz)))
+        return nn.Transformer.generate_square_subsequent_mask(sz).to(self.device)
 
     # TODO: fixed decoder to produce 1-token at a time
     def forward(self, src, time_indices, tgt=None):
@@ -218,12 +216,12 @@ class EncoderDecoder(nn.Module):
         # Encoder
         src = src.transpose(0, 1)  # [V, B, in_F]
         src = self.encoder_input_projection(src)  # [V, B, nhid]
-        src = self.pos_encoder(src, time_indices)
+        src = self.pos_encoder(src, time_indices) * math.sqrt(self.nhid)
         memory = self.encoder(src)  # [V, B, nhid]
 
         # Decoder
         tgt = self.decoder_input_projection(tgt)  # [out_F, B, nhid]
-        tgt = self.pos_decoder(tgt) * math.sqrt(self.group_size)
+        tgt = self.pos_decoder(tgt) * math.sqrt(self.nhid)
         tgt = tgt.transpose(0, 1)  # [out_F, B, nhid]
         mask = self._generate_square_subsequent_mask(tgt.size(0)).to(self.device)
         output = self.decoder(tgt, memory, tgt_mask=mask)  # [out_F, B, nhid]
