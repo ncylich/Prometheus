@@ -192,6 +192,8 @@ class EncoderDecoder(nn.Module):
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Embedding):
             nn.init.uniform_(m.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
+        elif isinstance(m, StaticPositionalEmbedding):
+            nn.init.uniform_(m.pe.weight, -self.init_weight_magnitude, self.init_weight_magnitude)
         elif isinstance(m, nn.TransformerEncoderLayer) or isinstance(m, nn.TransformerDecoderLayer):
             for param in m.parameters():
                 if param.dim() > 1:

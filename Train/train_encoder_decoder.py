@@ -191,7 +191,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             optimizer.step()
 
             epoch_loss += loss.item()
-            if i % 5 == 0:
+            if (i + 1) % 5 == 0:
                 print(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item()}')
         epoch_loss /= len(train_loader)
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss}')
@@ -250,7 +250,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         scheduler.step(test_losses[1])  # only use MSE loss for scheduler
 
         sleep(1e-5)
-        print(f'Test MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
+        print(f'\nTest MAE Loss: {test_losses[0]}, MSE Loss: {test_losses[1]}')
         correct_ups = total_correct_ups/len(test_loader)
         correct_downs = total_correct_downs/len(test_loader)
         correct_overall = total_correct_overall/len(test_loader)
