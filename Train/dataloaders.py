@@ -10,7 +10,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"  #\
     # else "mps" if torch.backends.mps.is_available() else "cpu"
 
 class StockDataset(Dataset):
-    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None):
+    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None, log_vols=False):
         if tickers is None:
             tickers = set([col.split('_')[0] for col in list(data.columns) if '_' in col])
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
@@ -32,7 +32,12 @@ class StockDataset(Dataset):
             sub_data = torch.from_numpy(data[f'{ticker}_{predict_col}'].to_numpy()).float()
             self.velocities[ticker] = sub_data[1:] / sub_data[:-1]
 
-        self.volumes = {ticker: torch.from_numpy(data[f'{ticker}_volume'].to_numpy()[1:]) for ticker in tickers}
+        self.volumes = {}
+        for ticker in tickers:
+            if log_vols:
+                self.volumes[ticker] = torch.from_numpy(torch.log(data[f'{ticker}_volume'].to_numpy()[1:] + 1e-6))
+            else:
+                self.volumes[ticker] = torch.from_numpy(data[f'{ticker}_volume'].to_numpy()[1:])
 
     def __len__(self):
         # Takes first ticker and gets the length of the prices
