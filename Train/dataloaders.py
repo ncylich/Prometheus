@@ -44,11 +44,12 @@ class StockDataset(Dataset):
             assert not np.isnan(velocity).any()
 
             if training_set:
-                velocity, min_val, max_val = self.min_max_scale(velocity)
-                self.ticker_velocity_scale_params[ticker] = (min_val, max_val)
-            else:
-                min_val, max_val = self.ticker_velocity_scale_params[ticker]
-                velocity = (velocity - min_val) / (max_val - min_val)
+                # offset, scale = self.min_max_scale(velocity)
+                offset, scale = self.mean_std_scale(velocity)
+                self.ticker_velocity_scale_params[ticker] = (offset, scale)
+
+            offset, scale = self.ticker_velocity_scale_params[ticker]
+            velocity = (velocity - offset) / scale
 
             assert not np.isnan(velocity).any()
 
@@ -64,11 +65,11 @@ class StockDataset(Dataset):
                 volume = np.log(volume + 1)
 
             if training_set:
-                volume, min_val, max_val = self.min_max_scale(volume)
-                self.ticker_volume_scale_params[ticker] = (min_val, max_val)
-            else:
-                min_val, max_val = self.ticker_volume_scale_params[ticker]
-                volume = (volume - min_val) / (max_val - min_val)
+                offset, scale = self.min_max_scale(volume)
+                self.ticker_volume_scale_params[ticker] = (offset, scale)
+
+            offset, scale = self.ticker_volume_scale_params[ticker]
+            volume = (volume - offset) / scale
 
             volume = torch.from_numpy(volume).float()
             self.volumes[ticker] = volume
@@ -87,7 +88,7 @@ class StockDataset(Dataset):
         x_prices = []
         x_volumes = []
         y_changes = []
-        y_std_devs = []
+        y_stds = []
 
         for ticker in self.tickers:
             veolicty_seq = self.velocities[ticker][idx: idx + self.backcast_size]
@@ -101,20 +102,20 @@ class StockDataset(Dataset):
             output_prices = self.prices[ticker][idx + self.backcast_size - 1: idx + self.backcast_size + self.forecast_size]
             output_velocities = output_prices[1:] - output_prices[:-1]  # absolute velocity
             output_velocities = output_velocities / final_input_price  # scaled velocity
-            std_dev = torch.std(output_velocities)
+            std = torch.std(output_velocities)
 
             x_prices.append(veolicty_seq)
             x_volumes.append(volume_seq)
             y_changes.append(output_change)
-            y_std_devs.append(std_dev)
+            y_stds.append(std)
 
         x_prices = torch.stack(x_prices)  # Shape: [num_tickers, backcast_size]
         x_volumes = torch.stack(x_volumes)  # Shape: [num_tickers, backcast_size]
         x = torch.stack([x_prices, x_volumes])  # Shape: [2, num_tickers, backcast_size]
 
         y_changes = torch.stack(y_changes)  # Shape: [num_tickers]
-        y_std_devs = torch.stack(y_std_devs)  # Shape: [num_tickers]
-        y = torch.stack([y_changes, y_std_devs])  # Shape: [2, num_tickers]
+        y_stds = torch.stack(y_stds)  # Shape: [num_tickers]
+        y = torch.stack([y_changes, y_stds])  # Shape: [2, num_tickers]
 
         time = torch.stack([self.hours[idx + self.backcast_size],
                             self.month[idx + self.backcast_size],
@@ -126,8 +127,13 @@ class StockDataset(Dataset):
     def min_max_scale(data):
         min_val = np.min(data)
         max_val = np.max(data)
-        scaled_data = (data - min_val) / (max_val - min_val)
-        return scaled_data, min_val, max_val
+        return min_val, max_val - min_val
+
+    @staticmethod
+    def mean_std_scale(data):
+        mean = np.mean(data)
+        std = np.std(data)
+        return mean, std
 
 def test_train_split(df, test_size_ratio=.2):
     test_len = int(len(df) * test_size_ratio)
@@ -180,33 +186,33 @@ Std Devs Loss: tensor(2.7539e-05, dtype=torch.float64)
 if __name__ == '__main__':
     data_loader, test_loader = get_long_term_Xmin_data_loaders(5, 5, x_min=5, batch_size=1)
     mean_change = torch.zeros(8)
-    mean_std_dev = torch.zeros(8)
+    mean_std = torch.zeros(8)
     for x, y, time in tqdm(data_loader):
         mean_change += y[0, 0]
-        mean_std_dev += y[0, 1]
+        mean_std += y[0, 1]
     mean_change /= len(data_loader)
-    mean_std_dev /= len(data_loader)
+    mean_std /= len(data_loader)
     print('Mean Change:', mean_change)
-    print('Mean Std Dev:', mean_std_dev)
+    print('Mean Std Dev:', mean_std)
 
     residual_changes = torch.zeros(8)
-    residual_std_devs = torch.zeros(8)
+    residual_stds = torch.zeros(8)
     changes_loss = 0
-    std_devs_loss = 0
+    stds_loss = 0
     for x, y, time in tqdm(test_loader):
         residual_change = y[0, 0] - mean_change
-        residual_std_dev = y[0, 1] - mean_std_dev
+        residual_std = y[0, 1] - mean_std
         residual_changes += residual_change * residual_change
-        residual_std_devs += residual_std_dev * residual_std_dev
+        residual_stds += residual_std * residual_std
 
         # use MSE loss between predicted and actual using mean change and mean std dev
         changes_loss += F.mse_loss(mean_change, y[0, 0])
-        std_devs_loss += F.mse_loss(mean_std_dev, y[0,1])
+        stds_loss += F.mse_loss(mean_std, y[0,1])
 
     residual_changes /= len(test_loader)
-    residual_std_devs /= len(test_loader)
+    residual_stds /= len(test_loader)
 
     print('Residual Changes:', residual_changes)
-    print('Residual Std Devs:', residual_std_devs)
+    print('Residual Std Devs:', residual_stds)
     print('Changes Loss:', changes_loss)
-    print('Std Devs Loss:', std_devs_loss)
+    print('Std Devs Loss:', stds_loss)

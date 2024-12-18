@@ -31,7 +31,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
             # Continuous features (price velocities) from the first channel
             cont_feats = x[:, 0, :, :]  # (B, L, backcast_size)
-            target_feats = model.normalize_velocities(cont_feats.clone())
+            target_feats = cont_feats.clone()
 
             # Create token_ids: [0..7] for each sequence
             token_ids = torch.arange(num_tickers, device=device).unsqueeze(0).expand(batch_size, -1).clone()
@@ -73,7 +73,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
                 batch_size = x.size(0)
                 cont_feats = x[:, 0, :, :]
-                target_feats = model.normalize_velocities(cont_feats.clone())
+                target_feats = cont_feats.clone()
 
                 token_ids = torch.arange(num_tickers, device=device).unsqueeze(0).expand(batch_size, -1).clone()
 

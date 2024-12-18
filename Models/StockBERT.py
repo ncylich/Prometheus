@@ -72,7 +72,7 @@ class StockBert(nn.Module):
         # Time Embeddings
         self.hour_embed = nn.Embedding(24, embed_dim)
         self.month_embed = nn.Embedding(12, embed_dim)
-        self.year_embed = nn.Embedding(n_years, embed_dim)  # Assuming years from 1900 to 2024
+        self.year_embed = nn.Embedding(n_years, embed_dim)  # Assuming years from 2004 to 2024
 
         # Continuous Feature Embeddings
         # This maps continuous features to the same space as token embeddings.
@@ -109,7 +109,8 @@ class StockBert(nn.Module):
         year_embeddings = self.year_embed(2024 - time_indices[:, 2])  # (B, D)
 
         # Continuous feature embeddings
-        cont_embeddings = self.cont_feat_proj(self.normalize_velocities(cont_feats))  # (B, L, D)
+        cont_embeddings = self.cont_feat_proj(cont_feats)  # (B, L, D)
+        # cont_embeddings = self.cont_feat_proj(self.normalize_velocities(cont_feats))  # (B, L, D)
 
         # # print all shapes
         # print('token_embeddings:', token_embeddings.shape)
