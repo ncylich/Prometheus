@@ -10,7 +10,11 @@ device = "cuda" if torch.cuda.is_available() else "cpu"  #\
     # else "mps" if torch.backends.mps.is_available() else "cpu"
 
 class StockDataset(Dataset):
-    def __init__(self, data, backcast_size, forecast_size, predict_col='close', tickers=None, log_vols=False):
+    ticker_velocity_scale_params = {}
+    ticker_volume_scale_params = {}
+
+
+    def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False):
         if tickers is None:
             tickers = set([col.split('_')[0] for col in list(data.columns) if '_' in col])
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
@@ -29,15 +33,34 @@ class StockDataset(Dataset):
 
         self.velocities = {}
         for ticker in tickers:
-            sub_data = torch.from_numpy(data[f'{ticker}_{predict_col}'].to_numpy()).float()
-            self.velocities[ticker] = sub_data[1:] / sub_data[:-1]
+            velocity = data[f'{ticker}_{predict_col}'].to_numpy()
+
+            if training_set:
+                velocity, min_val, max_val = self.min_max_scale(velocity)
+                self.ticker_velocity_scale_params[ticker] = (min_val, max_val)
+            else:
+                min_val, max_val = self.ticker_velocity_scale_params[ticker]
+                velocity = (velocity - min_val) / (max_val - min_val)
+
+            velocity = torch.from_numpy(velocity).float()
+            self.velocities[ticker] = velocity[1:] / velocity[:-1]
 
         self.volumes = {}
         for ticker in tickers:
+            volume = data[f'{ticker}_volume'].to_numpy()[1:]
             if log_vols:
-                self.volumes[ticker] = torch.from_numpy(torch.log(data[f'{ticker}_volume'].to_numpy()[1:] + 1e-6))
+                volume = np.log(volume + 1)
+
+            if training_set:
+                volume, min_val, max_val = self.min_max_scale(volume)
+                self.ticker_volume_scale_params[ticker] = (min_val, max_val)
             else:
-                self.volumes[ticker] = torch.from_numpy(data[f'{ticker}_volume'].to_numpy()[1:])
+                min_val, max_val = self.ticker_volume_scale_params[ticker]
+                volume = (volume - min_val) / (max_val - min_val)
+
+            volume = torch.from_numpy(volume).float()
+            self.volumes[ticker] = volume
+
 
     def __len__(self):
         # Takes first ticker and gets the length of the prices
@@ -82,6 +105,14 @@ class StockDataset(Dataset):
 
         return x.to(device), y.to(device), time.to(device)
 
+    @staticmethod
+    def min_max_scale(data):
+        data = np.array(data)
+        min_val = np.min(data)
+        max_val = np.max(data)
+        scaled_data = (data - min_val) / (max_val - min_val)
+        return scaled_data, min_val, max_val
+
 def test_train_split(df, test_size_ratio):
     test_len = int(len(df) * test_size_ratio)
     return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
@@ -110,8 +141,8 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
 
     train_data, test_data = test_train_split(data, test_size_ratio)
 
-    train_dataset = StockDataset(train_data, backcast_size, forecast_size, predict_col=dataset_col)
-    test_dataset = StockDataset(test_data, backcast_size, forecast_size, predict_col=dataset_col)
+    train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col)
+    test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col)
 
     data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
