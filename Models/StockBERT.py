@@ -32,9 +32,9 @@ class Config:
 
     factor: int = 2
     seq_len: int = backcast_size + forecast_size
-    nhid: int = 128 * factor
+    nhid: int = 128
     nhead: int = 8
-    dim_feedfwd: int = 512 * factor
+    dim_feedfwd: int = 512
     nlayers: int = 24
     dropout: float = 0.1
     batch_size: int = 1024
@@ -43,9 +43,6 @@ class Config:
     lr = 1e-3
     epochs = 100
     init_weight_magnitude = 1e-3  # / (factor ** 2)
-
-    aux_loss_weight: float = 1
-
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
