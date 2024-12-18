@@ -16,7 +16,8 @@ class StockDataset(Dataset):
 
     def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False):
         if tickers is None:
-            tickers = set([col.split('_')[0] for col in list(data.columns) if '_' in col])
+            # remove immediate repetitions, ie, make it a set, but preserve order
+            tickers = list(dict.fromkeys([col.split('_')[0] for col in list(data.columns) if '_' in col]))
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
         data['date'] = data['date'].dt.tz_convert('America/New_York')
 
@@ -44,6 +45,9 @@ class StockDataset(Dataset):
 
             velocity = torch.from_numpy(velocity).float()
             self.velocities[ticker] = velocity[1:] / velocity[:-1]
+            # interpolate all nans and infs
+            self.velocities[ticker][torch.isnan(self.velocities[ticker])] = 1
+            self.velocities[ticker][torch.isinf(self.velocities[ticker])] = 1
 
         self.volumes = {}
         for ticker in tickers:
@@ -60,6 +64,11 @@ class StockDataset(Dataset):
 
             volume = torch.from_numpy(volume).float()
             self.volumes[ticker] = volume
+
+        # print mean and std for all velocities
+        print(self.tickers)
+        print(torch.stack([torch.mean(self.velocities[ticker]) for ticker in self.tickers]))
+        print(torch.stack([torch.std(self.velocities[ticker]) for ticker in self.tickers]))
 
 
     def __len__(self):
@@ -166,7 +175,8 @@ if __name__ == '__main__':
     mean_change = torch.zeros(8)
     mean_std_dev = torch.zeros(8)
     for x, y, time in tqdm(data_loader):
-        # print(x.shape, y.shape, time.shape)
+        print(time)
+        break
         mean_change += y[0, 0]
         mean_std_dev += y[0, 1]
     mean_change /= len(data_loader)
