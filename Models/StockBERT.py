@@ -132,7 +132,9 @@ class StockBert(nn.Module):
 
         return logits
 
-    def normalize_velocities(self, cont_feats):
+    # Unused - integrated mean and std normalization into dataset instead
+    @staticmethod
+    def normalize_velocities(cont_feats):
         '''
         ['CL', 'ZN', 'SI', 'DX', 'VX', 'NG', 'HG', 'GC']
         Mean:

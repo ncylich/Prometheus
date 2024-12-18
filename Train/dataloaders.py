@@ -74,12 +74,6 @@ class StockDataset(Dataset):
             volume = torch.from_numpy(volume).float()
             self.volumes[ticker] = volume
 
-        # print mean and std for all velocities
-        print(self.tickers)
-        print(torch.stack([torch.mean(self.velocities[ticker]) for ticker in self.tickers]))
-        print(torch.stack([torch.std(self.velocities[ticker]) for ticker in self.tickers]))
-
-
     def __len__(self):
         # Takes first ticker and gets the length of the prices
         return len(self.velocities[next(iter(self.tickers))]) - self.backcast_size - self.forecast_size
@@ -172,19 +166,18 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
 
 '''
 OUTPUT:
-100%|██████████| 79989/79989 [00:15<00:00, 5263.17it/s]
-Mean Change: tensor([1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0001, 1.0000, 1.0000])
-Mean Std Dev: tensor([0.0016, 0.0022, 0.0021, 0.0004, 0.0012, 0.0050, 0.0028, 0.0005])
-100%|██████████| 20/20 [00:03<00:00,  5.82it/s]
-Residual Changes: tensor([4.3875e-06, 6.9440e-06, 3.6015e-05, 4.8893e-07, 3.4257e-06, 1.1219e-04,
-        3.8588e-05, 7.2155e-07])
-Residual Std Devs: tensor([6.6536e-07, 1.7135e-06, 1.7487e-06, 4.1230e-08, 5.5523e-07, 4.1145e-06,
-        2.1094e-06, 6.7735e-08])
-Changes Loss: tensor(0.0005, dtype=torch.float64)
-Std Devs Loss: tensor(2.7539e-05, dtype=torch.float64)
+100%|██████████| 79986/79986 [00:19<00:00, 4170.51it/s]
+Mean Dev: tensor([0.0023, 0.0004, 0.0024, 0.0006, 0.0054, 0.0030, 0.0018, 0.0013])
+100%|██████████| 20/20 [00:04<00:00,  4.88it/s]
+Residual Changes: tensor([6.9192e-05, 8.0618e-07, 2.3940e-05, 4.1350e-06, 3.4378e-04, 6.2636e-05,
+        4.1801e-05, 9.5098e-06])
+Residual Std Devs: tensor([4.3353e-06, 4.7819e-08, 2.1459e-06, 2.3209e-07, 1.9986e-05, 1.4818e-06,
+        1.2938e-06, 5.4249e-07])
+Changes Loss: tensor(0.0014, dtype=torch.float64)
+Std Loss: tensor(7.5162e-05, dtype=torch.float64)
 '''
 if __name__ == '__main__':
-    data_loader, test_loader = get_long_term_Xmin_data_loaders(5, 5, x_min=5, batch_size=1)
+    data_loader, test_loader = get_long_term_Xmin_data_loaders(1, 12, x_min=5, batch_size=1)
     mean_change = torch.zeros(8)
     mean_std = torch.zeros(8)
     for x, y, time in tqdm(data_loader):
@@ -193,7 +186,7 @@ if __name__ == '__main__':
     mean_change /= len(data_loader)
     mean_std /= len(data_loader)
     print('Mean Change:', mean_change)
-    print('Mean Std Dev:', mean_std)
+    print('Mean Dev:', mean_std)
 
     residual_changes = torch.zeros(8)
     residual_stds = torch.zeros(8)
@@ -215,4 +208,4 @@ if __name__ == '__main__':
     print('Residual Changes:', residual_changes)
     print('Residual Std Devs:', residual_stds)
     print('Changes Loss:', changes_loss)
-    print('Std Devs Loss:', stds_loss)
+    print('Std Loss:', stds_loss)
