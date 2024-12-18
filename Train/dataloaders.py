@@ -166,18 +166,19 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
 
 '''
 OUTPUT:
-100%|██████████| 79986/79986 [00:19<00:00, 4170.51it/s]
-Mean Dev: tensor([0.0023, 0.0004, 0.0024, 0.0006, 0.0054, 0.0030, 0.0018, 0.0013])
-100%|██████████| 20/20 [00:04<00:00,  4.88it/s]
-Residual Changes: tensor([6.9192e-05, 8.0618e-07, 2.3940e-05, 4.1350e-06, 3.4378e-04, 6.2636e-05,
-        4.1801e-05, 9.5098e-06])
-Residual Std Devs: tensor([4.3353e-06, 4.7819e-08, 2.1459e-06, 2.3209e-07, 1.9986e-05, 1.4818e-06,
-        1.2938e-06, 5.4249e-07])
-Changes Loss: tensor(0.0014, dtype=torch.float64)
-Std Loss: tensor(7.5162e-05, dtype=torch.float64)
+100%|██████████| 79962/79962 [00:15<00:00, 5235.90it/s]
+Mean Change: tensor([0.9999, 1.0000, 1.0002, 1.0001, 1.0006, 0.9998, 1.0000, 1.0002])
+Mean Std: tensor([0.0024, 0.0005, 0.0026, 0.0006, 0.0059, 0.0033, 0.0020, 0.0014])
+100%|██████████| 20/20 [00:03<00:00,  6.35it/s]
+Residual Changes: tensor([2.0759e-04, 2.7756e-06, 3.2590e-05, 9.2425e-06, 5.2072e-04, 2.6806e-04,
+        7.9735e-05, 2.4252e-05])
+Residual Stds: tensor([7.1884e-07, 4.8953e-08, 1.7324e-06, 8.6941e-08, 3.9700e-06, 1.7752e-06,
+        9.4636e-07, 4.7954e-07])
+Changes Loss: tensor(0.0029, dtype=torch.float64)
+Std Loss: tensor(2.4396e-05, dtype=torch.float64)
 '''
 if __name__ == '__main__':
-    data_loader, test_loader = get_long_term_Xmin_data_loaders(1, 12, x_min=5, batch_size=1)
+    data_loader, test_loader = get_long_term_Xmin_data_loaders(1, 36, x_min=5, batch_size=1)
     mean_change = torch.zeros(8)
     mean_std = torch.zeros(8)
     for x, y, time in tqdm(data_loader):
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     mean_change /= len(data_loader)
     mean_std /= len(data_loader)
     print('Mean Change:', mean_change)
-    print('Mean Dev:', mean_std)
+    print('Mean Std:', mean_std)
 
     residual_changes = torch.zeros(8)
     residual_stds = torch.zeros(8)
@@ -206,6 +207,6 @@ if __name__ == '__main__':
     residual_stds /= len(test_loader)
 
     print('Residual Changes:', residual_changes)
-    print('Residual Std Devs:', residual_stds)
+    print('Residual Stds:', residual_stds)
     print('Changes Loss:', changes_loss)
     print('Std Loss:', stds_loss)
