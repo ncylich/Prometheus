@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 import torch
+from tqdm import tqdm
 import os
 
 device = "cuda" if torch.cuda.is_available() else "cpu"  #\
@@ -110,11 +112,50 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
     test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
     return data_dataloader, test_dataloader
 
+'''
+OUTPUT:
+100%|██████████| 79989/79989 [00:15<00:00, 5263.17it/s]
+Mean Change: tensor([1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0001, 1.0000, 1.0000])
+Mean Std Dev: tensor([0.0016, 0.0022, 0.0021, 0.0004, 0.0012, 0.0050, 0.0028, 0.0005])
+100%|██████████| 20/20 [00:03<00:00,  5.82it/s]
+Residual Changes: tensor([4.3875e-06, 6.9440e-06, 3.6015e-05, 4.8893e-07, 3.4257e-06, 1.1219e-04,
+        3.8588e-05, 7.2155e-07])
+Residual Std Devs: tensor([6.6536e-07, 1.7135e-06, 1.7487e-06, 4.1230e-08, 5.5523e-07, 4.1145e-06,
+        2.1094e-06, 6.7735e-08])
+Changes Loss: tensor(0.0005, dtype=torch.float64)
+Std Devs Loss: tensor(2.7539e-05, dtype=torch.float64)
+'''
 if __name__ == '__main__':
-    data_loader, test_loader = get_long_term_Xmin_data_loaders(5, 5, x_min=5)
-    for x, y, time in data_loader:
-        print(x.shape, y.shape, time.shape)
-        break
-    for x, y, time in test_loader:
-        print(x.shape, y.shape, time.shape)
-        break
+    data_loader, test_loader = get_long_term_Xmin_data_loaders(5, 5, x_min=5, batch_size=1)
+    mean_change = torch.zeros(8)
+    mean_std_dev = torch.zeros(8)
+    for x, y, time in tqdm(data_loader):
+        # print(x.shape, y.shape, time.shape)
+        mean_change += y[0, 0]
+        mean_std_dev += y[0, 1]
+    mean_change /= len(data_loader)
+    mean_std_dev /= len(data_loader)
+    print('Mean Change:', mean_change)
+    print('Mean Std Dev:', mean_std_dev)
+
+    residual_changes = torch.zeros(8)
+    residual_std_devs = torch.zeros(8)
+    changes_loss = 0
+    std_devs_loss = 0
+    for x, y, time in tqdm(test_loader):
+        residual_change = y[0, 0] - mean_change
+        residual_std_dev = y[0, 1] - mean_std_dev
+        residual_changes += residual_change * residual_change
+        residual_std_devs += residual_std_dev * residual_std_dev
+
+        # use MSE loss between predicted and actual using mean change and mean std dev
+        changes_loss += F.mse_loss(mean_change, y[0, 0])
+        std_devs_loss += F.mse_loss(mean_std_dev, y[0,1])
+
+    residual_changes /= len(test_loader)
+    residual_std_devs /= len(test_loader)
+
+    print('Residual Changes:', residual_changes)
+    print('Residual Std Devs:', residual_std_devs)
+    print('Changes Loss:', changes_loss)
+    print('Std Devs Loss:', std_devs_loss)
