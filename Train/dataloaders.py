@@ -16,8 +16,11 @@ class StockDataset(Dataset):
 
     def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False):
         if tickers is None:
-            # remove immediate repetitions, ie, make it a set, but preserve order
-            tickers = list(dict.fromkeys([col.split('_')[0] for col in list(data.columns) if '_' in col]))
+            tickers = []
+            for ticker in [col.split('_')[0] for col in list(data.columns) if '_' in col]:
+                if ticker not in tickers:
+                    tickers.append(ticker)
+
         data['date'] = pd.to_datetime(data['date'], errors='coerce', utc=True)
         data['date'] = data['date'].dt.tz_convert('America/New_York')
 
@@ -34,7 +37,11 @@ class StockDataset(Dataset):
 
         self.velocities = {}
         for ticker in tickers:
-            velocity = data[f'{ticker}_{predict_col}'].to_numpy()
+            prices = data[f'{ticker}_{predict_col}'].to_numpy()
+            velocity = prices[1:] / prices[:-1]
+
+            assert not np.isnan(prices).any()
+            assert not np.isnan(velocity).any()
 
             if training_set:
                 velocity, min_val, max_val = self.min_max_scale(velocity)
@@ -43,11 +50,12 @@ class StockDataset(Dataset):
                 min_val, max_val = self.ticker_velocity_scale_params[ticker]
                 velocity = (velocity - min_val) / (max_val - min_val)
 
-            velocity = torch.from_numpy(velocity).float()
-            self.velocities[ticker] = velocity[1:] / velocity[:-1]
-            # interpolate all nans and infs
-            self.velocities[ticker][torch.isnan(self.velocities[ticker])] = 1
-            self.velocities[ticker][torch.isinf(self.velocities[ticker])] = 1
+            assert not np.isnan(velocity).any()
+
+            self.velocities[ticker] = torch.from_numpy(velocity).float()
+            # # interpolate all nans and infs
+            # self.velocities[ticker][torch.isnan(self.velocities[ticker])] = 1
+            # self.velocities[ticker][torch.isinf(self.velocities[ticker])] = 1
 
         self.volumes = {}
         for ticker in tickers:
@@ -116,13 +124,12 @@ class StockDataset(Dataset):
 
     @staticmethod
     def min_max_scale(data):
-        data = np.array(data)
         min_val = np.min(data)
         max_val = np.max(data)
         scaled_data = (data - min_val) / (max_val - min_val)
         return scaled_data, min_val, max_val
 
-def test_train_split(df, test_size_ratio):
+def test_train_split(df, test_size_ratio=.2):
     test_len = int(len(df) * test_size_ratio)
     return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
 
@@ -175,8 +182,6 @@ if __name__ == '__main__':
     mean_change = torch.zeros(8)
     mean_std_dev = torch.zeros(8)
     for x, y, time in tqdm(data_loader):
-        print(time)
-        break
         mean_change += y[0, 0]
         mean_std_dev += y[0, 1]
     mean_change /= len(data_loader)
