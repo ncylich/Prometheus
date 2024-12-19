@@ -46,7 +46,6 @@ def process_batch(model, x, time, mask_prob, device):
     predictions = model(token_ids, cont_feats, time_indices)  # (B, L, backcast_size)
 
     # Compute loss only on masked positions
-    mask = mask.unsqueeze(-1).expand_as(target_feats)  # (B,L,F)
     masked_predictions = predictions[mask]
     masked_targets = target_feats[mask]
 
