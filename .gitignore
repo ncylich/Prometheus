@@ -18,3 +18,4 @@ DataCollection/CL_continuous_adjusted/
 DataCollection/CL_continuous_unadjusted/
 
 Local_Data/
+*.parquet
