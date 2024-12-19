@@ -1,13 +1,15 @@
-import time
-
+from tqdm import tqdm
 import long_term_data
 import pandas as pd
-import sys
+import time
 import os
+
+UNADJUSTED = True
+TIME_INTERVAL = 30
 
 
 def x_minute_file_name(x_min):
-    return f'{x_min}min_long_term_merged_UNadjusted.parquet'
+    return os.path.join('Local_Data', f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet')
 file = x_minute_file_name(1)
 
 try:
@@ -17,6 +19,7 @@ except FileNotFoundError:
     long_term_data.main()
     time.sleep(1)
     data = pd.read_parquet(file)
+
 
 def get_tickers(df):
     all_tickers = [col.split('_')[0] for col in df.columns]
@@ -29,14 +32,16 @@ def get_tickers(df):
     return ordered_tickers
 tickers = get_tickers(data)
 
+
 def aggregate_long_term_data(interval: int=5):
     df = pd.DataFrame(data.head(0))
-    for i in range(0, len(data), interval):
+    for i in tqdm(range(0, len(data), interval)):
         # set initial values to first row
         row = data.iloc[i]
         values = {col: row[col] for col in df.columns}
-        for j in range(1, interval):
-            row = data.iloc[i+j]
+        end_idx = min(i + interval, len(data))
+        for j in range(i + 1, end_idx):
+            row = data.iloc[j]
             for col in df.columns:
                 if 'volume' in col:
                     values[col] += row[col]  # sums volume
@@ -54,7 +59,13 @@ def aggregate_long_term_data(interval: int=5):
         ordered_values = [values[col] for col in df.columns]  # orders values to match df
         df.loc[len(df)] = ordered_values  # appends row to df
 
+    return df
+
+
+def main():
+    result = aggregate_long_term_data(TIME_INTERVAL)
+    result.to_parquet(x_minute_file_name(TIME_INTERVAL), compression='snappy', index=True)
+
+
 if __name__ == '__main__':
-    time_interval = 5
-    result = aggregate_long_term_data(time_interval)
-    result.to_parquet(x_minute_file_name(time_interval))
+    main()

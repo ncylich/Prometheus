@@ -16,6 +16,7 @@ COLS = {
 unadjusted_postfix = '_full_1min_continuous_UNadjusted'
 adjusted_postfix = '_full_1min_continuous_ratio_adjusted'
 data_dir = 'long_term_data'
+result_dir = 'Local_Data'
 
 def get_files(path=data_dir):
     """
@@ -119,12 +120,12 @@ def main():
 
     df = merge_data(files)
     print('UNadjusted number of row:', len(df))
-    path = os.path.join(data_dir, '1min_long_term_merged_UNadjusted.parquet')
+    path = os.path.join(result_dir, '1min_long_term_merged_UNadjusted.parquet')
     df.to_parquet(path, compression='snappy', index=True)
 
     df = merge_data(files, adjusted=True)
     print('adjusted number of row:', len(df))
-    path = os.path.join(data_dir, '1min_long_term_merged_adjusted.parquet')
+    path = os.path.join(result_dir, '1min_long_term_merged_adjusted.parquet')
     df.to_parquet(path, compression='snappy', index=True)
 
 if __name__ == '__main__':
