@@ -5,11 +5,11 @@ import time
 import os
 
 UNADJUSTED = True
-TIME_INTERVAL = 30
+TIME_INTERVAL = 60
 
 
 def x_minute_file_name(x_min):
-    return os.path.join('Local_Data', f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet')
+    return os.path.join('..', 'Local_Data', f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet')
 file = x_minute_file_name(1)
 
 try:
@@ -38,26 +38,25 @@ def aggregate_long_term_data(interval: int=5):
     for i in tqdm(range(0, len(data), interval)):
         # set initial values to first row
         row = data.iloc[i]
-        values = {col: row[col] for col in df.columns}
+        values = [row[col] for col in df.columns]
         end_idx = min(i + interval, len(data))
         for j in range(i + 1, end_idx):
             row = data.iloc[j]
-            for col in df.columns:
+            for col_idx, col in enumerate(df.columns):
                 if 'volume' in col:
-                    values[col] += row[col]  # sums volume
+                    values[col_idx] += row[col]  # sums volume
                 elif 'close' in col:
-                    values[col] = row[col]  # takes final close price
+                    values[col_idx] = row[col]  # takes final close price
                 elif 'high' in col:
-                    values[col] = max(values[col], row[col])  # takes max high price
+                    values[col_idx] = max(values[col_idx], row[col])  # takes max high price
                 elif 'low' in col:
-                    values[col] = min(values[col], row[col])  # takes min low price
+                    values[col_idx] = min(values[col_idx], row[col])  # takes min low price
                 elif 'date' in col or 'open' in col:
                     continue  # skips date and open columns as they are derived from the original row
                 else:
                     raise ValueError(f'Column name not recognized: {col}')
 
-        ordered_values = [values[col] for col in df.columns]  # orders values to match df
-        df.loc[len(df)] = ordered_values  # appends row to df
+        df.loc[len(df)] = values  # appends row to df
 
     return df
 

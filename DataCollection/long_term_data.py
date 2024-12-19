@@ -16,7 +16,7 @@ COLS = {
 unadjusted_postfix = '_full_1min_continuous_UNadjusted'
 adjusted_postfix = '_full_1min_continuous_ratio_adjusted'
 data_dir = 'long_term_data'
-result_dir = 'Local_Data'
+result_dir = '../Local_Data'
 
 def get_files(path=data_dir):
     """
