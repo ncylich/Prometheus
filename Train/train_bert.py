@@ -35,11 +35,11 @@ def process_batch(model, x, time, mask_prob, device):
     # 80% of masks should be 0, 10% should be random, and 10% should be the same token
     rand_or_same_mask = torch.rand(mask.shape, device=device) < 0.2
     rand_or_same_mask = rand_or_same_mask & mask
-    mask = mask ^ rand_or_same_mask
+    zero_mask = mask ^ rand_or_same_mask
 
     rand_mask = torch.rand(mask.shape, device=device) < 0.5
     rand_mask = rand_mask & rand_or_same_mask
-    cont_feats[mask] = 0  # Zero out masked positions
+    cont_feats[zero_mask] = 0  # Zero out masked positions
     cont_feats[rand_mask] = torch.randn_like(cont_feats[rand_mask])  # Randomly replace masked positions
 
     # Forward pass
