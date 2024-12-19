@@ -69,8 +69,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
             train_loss += loss.item()
 
-            if i % 10 == 0:
-                print(f"Epoch [{epoch + 1}/{epochs}] - Batch [{i}/{len(train_loader)}] - Train Loss: {train_loss / (i + 1):.4f}")
+            if (i + 1) % 10 == 0 or i + 1 == len(train_loader):
+                print(f"Epoch [{epoch + 1}/{epochs}] - Batch [{i + 1}/{len(train_loader)}] - Train Loss: {train_loss / (i + 1):.4f}")
 
         train_loss /= len(train_loader)
 
