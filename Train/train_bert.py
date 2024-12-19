@@ -40,8 +40,10 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             mask = torch.rand(token_ids.shape, device=device) < mask_prob
             token_ids[mask] = mask_token_id
 
-            # time_indices is simply the provided time info
-            time_indices = time  # (B, 3)
+            time_indices = time  # (B, 3), time_indices is simply the provided time info
+
+            mask = mask.unsqueeze(-1).expand_as(cont_feats)  # mask shape: (B, L)
+            cont_feats[mask] = 0  # Zero out masked positions
 
             # Forward pass
             predictions = model(token_ids, cont_feats, time_indices)  # (B, L, backcast_size)
