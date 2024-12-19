@@ -49,7 +49,7 @@ def process_batch(model, x, time, mask_prob, device):
     masked_predictions = predictions[mask]
     masked_targets = target_feats[mask]
 
-    return masked_predictions, masked_targets, mask
+    return masked_predictions, masked_targets
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
     model = model.to(device)
@@ -60,7 +60,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         train_loss = 0.0
 
         for i, (x, y, time) in enumerate(train_loader):
-            masked_predictions, masked_targets, _ = process_batch(model, x, time, mask_prob, device)
+            masked_predictions, masked_targets = process_batch(model, x, time, mask_prob, device)
             loss = criterion(masked_predictions, masked_targets)
 
             optimizer.zero_grad()
@@ -79,7 +79,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         val_loss = 0.0
         with torch.no_grad():
             for x, y, time in test_loader:
-                masked_predictions, masked_targets, _ = process_batch(model, x, time, mask_prob, device)
+                masked_predictions, masked_targets = process_batch(model, x, time, mask_prob, device)
                 loss = criterion(masked_predictions, masked_targets)
                 val_loss += loss.item()
 
