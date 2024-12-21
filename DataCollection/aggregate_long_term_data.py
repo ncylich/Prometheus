@@ -6,36 +6,38 @@ import time
 import os
 
 UNADJUSTED = True
-TIME_INTERVAL = 5
+TIME_INTERVAL = 60
 
 
 def x_minute_file_name(x_min):
     file_name = f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet'
     return os.path.join('..', 'Local_Data', file_name)
-file = x_minute_file_name(1)
 
-try:
-    data = pd.read_parquet(file)
-except FileNotFoundError:
-    print(f'File not found, generating with long_term_data.py: {file}')
-    long_term_data.main()
-    time.sleep(1)
-    data = pd.read_parquet(file)
-
-
-def get_tickers(df):
-    all_tickers = [col.split('_')[0] for col in df.columns]
-    tickers_set = set(all_tickers)
-    ordered_tickers = []
-    for ticker in all_tickers:
-        if ticker in tickers_set:
-            ordered_tickers.append(ticker)
-            tickers_set.remove(ticker)
-    return ordered_tickers
-tickers = get_tickers(data)
+def get_data():
+    file = x_minute_file_name(1)
+    try:
+        data = pd.read_parquet(file)
+    except FileNotFoundError:
+        print(f'File not found, generating with long_term_data.py: {file}')
+        long_term_data.main()
+        time.sleep(1)
+        data = pd.read_parquet(file)
+    return data
 
 
-def aggregate_long_term_data(interval: int=5):
+# def get_tickers(df):
+#     all_tickers = [col.split('_')[0] for col in df.columns]
+#     tickers_set = set(all_tickers)
+#     ordered_tickers = []
+#     for ticker in all_tickers:
+#         if ticker in tickers_set:
+#             ordered_tickers.append(ticker)
+#             tickers_set.remove(ticker)
+#     return ordered_tickers
+# tickers = get_tickers(data)
+
+
+def aggregate_long_term_data(data, interval: int=5):
     df = pd.DataFrame(data.head(0))
     for i in tqdm(range(0, len(data), interval)):
         # set initial values to first row
@@ -63,7 +65,7 @@ def aggregate_long_term_data(interval: int=5):
     return df
 
 
-def optimized_aggregate_long_term_data(interval: int = 5) -> pd.DataFrame:
+def optimized_aggregate_long_term_data(data, interval: int = 5) -> pd.DataFrame:
     """
     Aggregates data in chunks of `interval` rows.
 
@@ -107,11 +109,15 @@ def optimized_aggregate_long_term_data(interval: int = 5) -> pd.DataFrame:
     return df_agg.reset_index(drop=True)
 
 
-def main():
-    # result = aggregate_long_term_data(TIME_INTERVAL)
-    result = optimized_aggregate_long_term_data(TIME_INTERVAL)
-    result.to_parquet(x_minute_file_name(TIME_INTERVAL), compression='snappy', index=False)
+def main(time_interval):
+    data = get_data()
+    # result = aggregate_long_term_data(data, time_interval)
+    result = optimized_aggregate_long_term_data(data, time_interval)
+    result.to_parquet(x_minute_file_name(time_interval), compression='snappy', index=False)
+    print(result)
 
 
 if __name__ == '__main__':
-    main()
+    # main(TIME_INTERVAL)
+    for n in (5, 30, 60):
+        main(n)
