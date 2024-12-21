@@ -30,7 +30,7 @@ def get_files(path=data_dir):
     """
     all_files = os.listdir(path)
     data_files = [f for f in all_files if unadjusted_postfix in f or adjusted_postfix in f]
-    data_files = [f for f in data_files if not f.endswith('_filled.csv')]
+    data_files = [f for f in data_files if not f.endswith('_filled.csv')]  # remove filled files
     data_files = add_cols(data_files)
     return data_files
 
@@ -77,82 +77,6 @@ def get_tickers(files):
         tickers.add(get_ticker(file))
     return tickers
 
-# def fill_missing_times(df):
-#     new_df = df.head(0).copy()
-#     start_date = df.iloc[0]['date']
-#     prev_row = df.iloc[0]
-#     for i in tqdm(range(len(df))):
-#         row = df.iloc[i]
-#         date = row['date']
-#
-#         # if same day
-#         if date.day == start_date.day:
-#             start_date += pd.Timedelta(minutes=1)  # start from the next minute
-#             if start_date != date:
-#                 new_row = {'date': start_date, 'open': prev_row['close'], 'high': max(prev_row['close'], row['open']),
-#                            'low': min(prev_row['close'], row['open']), 'close': row['open'], 'volume': 0}
-#                 new_row = [new_row[col] for col in new_df.columns]
-#                 while start_date < date:
-#                     new_df.loc[len(new_df)] = new_row
-#                     start_date += pd.Timedelta(minutes=1)
-#
-#         new_df.loc[len(new_df)] = row
-#         prev_row = row
-#         start_date = date
-#     return new_df
-
-# def fill_missing_times_with_temp_file(df):
-#     # Ensure the data is sorted by date
-#     df = df.sort_values(by='date').reset_index(drop=True)
-#
-#     with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
-#         temp_file = temp_file.name
-#
-#     chunk_size = 10000  # Process in chunks to manage memory, 10,000
-#
-#     prev_row = df.iloc[0]
-#     results = [df.head(1).copy()]  # Temporary buffer for rows
-#     for i in tqdm(range(1, len(df))):
-#         current_row = df.iloc[i]
-#         prev_date = prev_row['date']
-#         curr_date = current_row['date']
-#
-#         if prev_date.day == curr_date.day:  # Same day
-#             missing_times = pd.date_range(
-#                 start=prev_date + pd.Timedelta(minutes=1),
-#                 end=curr_date - pd.Timedelta(minutes=1),
-#                 freq='min'
-#             )
-#
-#             if len(missing_times) > 0:
-#                 missing_data = pd.DataFrame({
-#                     'date': missing_times,
-#                     'open': prev_row['close'],
-#                     'high': max(prev_row['close'], current_row['open']),
-#                     'low': min(prev_row['close'], current_row['open']),
-#                     'close': current_row['open'],
-#                     'volume': 0
-#                 })
-#                 results.append(missing_data)
-#
-#         results.append(pd.DataFrame([current_row]))
-#
-#         # Periodically write to temp file
-#         if len(results) >= chunk_size:
-#             pd.concat(results).to_csv(temp_file, mode='a', index=False, header=not os.path.exists(temp_file))
-#             results = []  # Clear the buffer
-#
-#         prev_row = current_row
-#
-#     # Write any remaining rows
-#     if results:
-#         pd.concat(results).to_csv(temp_file, mode='a', index=False, header=not os.path.exists(temp_file))
-#
-#     # Read the temp file back into a DataFrame
-#     new_df = pd.read_csv(temp_file)
-#     os.remove(temp_file)  # Clean up the temp file
-#     return new_df
-
 def fill_missing_times_with_file(df, filled_file):
     # Ensure the data is sorted by date
     df = df.sort_values(by='date').reset_index(drop=True)
@@ -161,29 +85,53 @@ def fill_missing_times_with_file(df, filled_file):
     cols = {col: f"{col.strip()}" for col in df.columns}
     df = df.rename(columns=cols)
 
+    def fill_start_of_day(row, include_header=False):
+        start_delta = row['date'].minute % 30
+        if start_delta != 0:
+            missing_times = pd.date_range(
+                start=row['date'] - pd.Timedelta(minutes=start_delta),
+                end=row['date'] - pd.Timedelta(minutes=1),
+                freq='min'
+            )
+
+            price = row['open']
+            pd.DataFrame({
+                'date': missing_times,
+                'open': price,
+                'high': price,
+                'low': price,
+                'close': price,
+                'volume': 0
+            }).to_csv(filled_file, mode='a', index=False, header=include_header)
+            return True
+        return False
+
+    def fill_end_of_day(row):
+        end_delta = 30 - row['date'].minute % 30
+        if end_delta != 30:
+            missing_times = pd.date_range(
+                start=row['date'] + pd.Timedelta(minutes=1),
+                end=row['date'] + pd.Timedelta(minutes=end_delta),
+                freq='min'
+            )
+
+            price = row['close']
+            pd.DataFrame({
+                'date': missing_times,
+                'open': price,
+                'high': price,
+                'low': price,
+                'close': price,
+                'volume': 0
+            }).to_csv(filled_file, mode='a', index=False, header=False)
+            return True
+        return False
+
     prev_row = df.iloc[0]
     prev_date = prev_row['date']
 
-    # Adding in empty spots at the beginning of the day in case the first row doesn't start at 9:30
-    start_delta = prev_date.minute % 30
-    if start_delta != 0:
-        missing_times = pd.date_range(
-            start=prev_date - pd.Timedelta(minutes=start_delta),
-            end=prev_date - pd.Timedelta(minutes=1),
-            freq='min'
-        )
-
-        price = prev_row['open']
-        pd.DataFrame({
-            'date': missing_times,
-            'open': price,
-            'high': price,
-            'low': price,
-            'close': price,
-            'volume': 0
-        }).to_csv(filled_file, mode='a', index=False, header=True)
-
-    df.head(1).to_csv(filled_file, mode='a', index=False, header=(start_delta == 0))
+    header_exists = fill_start_of_day(prev_row, include_header=True)
+    df.head(1).to_csv(filled_file, mode='a', index=False, header=not header_exists)
 
     for i in tqdm(range(1, len(df))):
         current_row = df.iloc[i]
@@ -206,6 +154,9 @@ def fill_missing_times_with_file(df, filled_file):
                     'volume': 0
                 })
                 missing_data.to_csv(filled_file, mode='a', index=False, header=False)
+        else:
+            fill_end_of_day(prev_row)
+            fill_start_of_day(current_row)
 
         # faster than using pd to save
         with open(filled_file, mode='a', newline='') as f:
@@ -215,6 +166,8 @@ def fill_missing_times_with_file(df, filled_file):
 
         prev_row = current_row
         prev_date = curr_date
+
+    fill_end_of_day(prev_row)
 
     del df
 
@@ -351,7 +304,7 @@ def clean_old_filled_files():
             os.remove(os.path.join(data_dir, f))
 
 if __name__ == '__main__':
-    # clean_old_filled_files()
     start = pd.Timestamp.now()
+    clean_old_filled_files()
     main()
     print('Done:', pd.Timestamp.now() - start)
