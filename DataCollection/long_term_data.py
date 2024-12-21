@@ -7,6 +7,7 @@ import pandas as pd
 import pyarrow as pq
 from tqdm import tqdm
 
+
 COLS = {
     'date': 'str',
     'open': 'float32',
@@ -85,16 +86,14 @@ def fill_missing_times_with_file(df, filled_file):
     cols = {col: f"{col.strip()}" for col in df.columns}
     df = df.rename(columns=cols)
 
-    def fill_start_of_day(row, include_header=False):
-        start_delta = row['date'].minute % 30
-        if start_delta != 0:
-            missing_times = pd.date_range(
-                start=row['date'] - pd.Timedelta(minutes=start_delta),
-                end=row['date'] - pd.Timedelta(minutes=1),
-                freq='min'
-            )
+    def fill_data_times(start_fill, end_fill, price, include_header=False):
+        missing_times = pd.date_range(
+            start=start_fill,
+            end=end_fill,
+            freq='min'
+        )
 
-            price = row['open']
+        if len(missing_times) > 0:
             pd.DataFrame({
                 'date': missing_times,
                 'open': price,
@@ -103,27 +102,22 @@ def fill_missing_times_with_file(df, filled_file):
                 'close': price,
                 'volume': 0
             }).to_csv(filled_file, mode='a', index=False, header=include_header)
+
+    def fill_start_of_day(row, include_header=False):
+        start_delta = row['date'].minute % 30
+        if start_delta != 0:
+            start_time = row['date'] - pd.Timedelta(minutes=start_delta)
+            end_time = row['date'] - pd.Timedelta(minutes=1)
+            fill_data_times(start_time, end_time, row['open'], include_header=include_header)
             return True
         return False
 
     def fill_end_of_day(row):
         end_delta = 30 - row['date'].minute % 30
         if end_delta != 30:
-            missing_times = pd.date_range(
-                start=row['date'] + pd.Timedelta(minutes=1),
-                end=row['date'] + pd.Timedelta(minutes=end_delta),
-                freq='min'
-            )
-
-            price = row['close']
-            pd.DataFrame({
-                'date': missing_times,
-                'open': price,
-                'high': price,
-                'low': price,
-                'close': price,
-                'volume': 0
-            }).to_csv(filled_file, mode='a', index=False, header=False)
+            start_time = row['date'] + pd.Timedelta(minutes=1)
+            end_time = row['date'] + pd.Timedelta(minutes=end_delta)
+            fill_data_times(start_time, end_time, row['close'])
             return True
         return False
 
@@ -138,22 +132,7 @@ def fill_missing_times_with_file(df, filled_file):
         curr_date = current_row['date']
 
         if prev_date.day == curr_date.day:  # Same day
-            missing_times = pd.date_range(
-                start=prev_date + pd.Timedelta(minutes=1),
-                end=curr_date - pd.Timedelta(minutes=1),
-                freq='min'
-            )
-
-            if len(missing_times) > 0:
-                missing_data = pd.DataFrame({
-                    'date': missing_times,
-                    'open': prev_row['close'],
-                    'high': max(prev_row['close'], current_row['open']),
-                    'low': min(prev_row['close'], current_row['open']),
-                    'close': current_row['open'],
-                    'volume': 0
-                })
-                missing_data.to_csv(filled_file, mode='a', index=False, header=False)
+            fill_data_times(prev_date + pd.Timedelta(minutes=1), curr_date - pd.Timedelta(minutes=1), prev_row['close'])
         else:
             fill_end_of_day(prev_row)
             fill_start_of_day(current_row)
