@@ -1,15 +1,17 @@
 from tqdm import tqdm
 import long_term_data
 import pandas as pd
+import numpy as np
 import time
 import os
 
 UNADJUSTED = True
-TIME_INTERVAL = 60
+TIME_INTERVAL = 5
 
 
 def x_minute_file_name(x_min):
-    return os.path.join('..', 'Local_Data', f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet')
+    file_name = f'{x_min}min_long_term_merged_{"UN" if UNADJUSTED else ""}adjusted.parquet'
+    return os.path.join('..', 'Local_Data', file_name)
 file = x_minute_file_name(1)
 
 try:
@@ -61,9 +63,54 @@ def aggregate_long_term_data(interval: int=5):
     return df
 
 
+def optimized_aggregate_long_term_data(interval: int = 5) -> pd.DataFrame:
+    """
+    Aggregates data in chunks of `interval` rows.
+
+    Rules (based on original code logic):
+      - 'volume' columns: sum of volumes
+      - 'close' columns: final (last) close
+      - 'high' columns: max high
+      - 'low' columns: min low
+      - 'date' or 'open' columns: first row in the chunk
+      - Otherwise: raise ValueError
+    """
+
+    # Build a dictionary that tells Pandas how to aggregate each column
+    aggregator = {}
+    for col in data.columns:
+        if 'volume' in col:
+            aggregator[col] = 'sum'
+        elif 'close' in col:
+            aggregator[col] = 'last'
+        elif 'high' in col:
+            aggregator[col] = 'max'
+        elif 'low' in col:
+            aggregator[col] = 'min'
+        elif 'date' in col or 'open' in col:
+            aggregator[col] = 'first'
+        else:
+            raise ValueError(f'Column name not recognized for aggregation: {col}')
+
+    # Create a "group" identifier for each row, e.g. rows 0..4 -> group 0, rows 5..9 -> group 1, etc.
+    groups = np.arange(len(data)) // interval
+    data['group'] = groups
+
+    # Perform the groupby-aggregation
+    df_agg = data.groupby('group', as_index=False).agg(aggregator)
+
+    # Drop the group column
+    df_agg.drop(columns='group', inplace=True)
+
+    # Optional: rename the grouping column if you want a clean DataFrame index
+    # Here, we can drop the group column altogether after aggregation:
+    return df_agg.reset_index(drop=True)
+
+
 def main():
-    result = aggregate_long_term_data(TIME_INTERVAL)
-    result.to_parquet(x_minute_file_name(TIME_INTERVAL), compression='snappy', index=True)
+    # result = aggregate_long_term_data(TIME_INTERVAL)
+    result = optimized_aggregate_long_term_data(TIME_INTERVAL)
+    result.to_parquet(x_minute_file_name(TIME_INTERVAL), compression='snappy', index=False)
 
 
 if __name__ == '__main__':

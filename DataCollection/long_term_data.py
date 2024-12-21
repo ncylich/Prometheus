@@ -336,12 +336,12 @@ def main():
     if unadjusted:
         df = merge_data(files)
         print('UNadjusted number of row:', len(df))
-        path = os.path.join(result_dir, f'1min_long_term_merged_UNadjusted{"_filled" if fill_times else ""}.parquet')
+        path = os.path.join(result_dir, f'1min_long_term_merged_UNadjusted.parquet')
         df.to_parquet(path, compression='snappy', index=False)
     else:
         df = merge_data(files, adjusted=True)
         print('adjusted number of row:', len(df))
-        path = os.path.join(result_dir, f'1min_long_term_merged_adjusted{"_filled" if fill_times else ""}.parquet')
+        path = os.path.join(result_dir, f'1min_long_term_merged_adjusted.parquet')
         df.to_parquet(path, compression='snappy', index=False)
 
 def clean_old_filled_files():
