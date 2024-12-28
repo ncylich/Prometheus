@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
+skip_naive = True
+
 def process_batch(model, x, time, mask_prob, device):
     num_tickers = x.size(-2)  # Sequence length (number of ticker tokens), -2nd dim of X
     mask_token_id = num_tickers  # ID for the [MASK] token
@@ -145,5 +147,6 @@ def train_model_base(model, train_loader, test_loader, criterion, optimizer, sch
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
-    train_naive_models(train_loader, test_loader, criterion, device)  # Get a baseline before training
+    if not skip_naive:
+        train_naive_models(train_loader, test_loader, criterion, device)  # Get a baseline before training
     return train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device)

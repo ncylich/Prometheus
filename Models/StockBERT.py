@@ -1,4 +1,5 @@
 import sys
+
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_bert import train_model
     from Prometheus.Train.dataloaders import get_long_term_Xmin_data_loaders
@@ -49,22 +50,30 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class StockBert(nn.Module):
     def __init__(self,
-                 n_tickers,  # Number of tickers
+                 n_inp_tokens,  # Number of tickers
                  embed_dim=128,  # Embedding dimension
                  n_heads=4,  # Number of attention heads
                  num_layers=2,  # Number of transformer layers
                  ff_dim=256,  # Feed-forward dimension in transformer
                  backcast_size=10,  # Dimension of continuous features (e.g. velocity vector)
-                 max_seq_len=8,  # Maximum sequence length
+                 n_tickers=8,  # Maximum sequence length
                  n_years=20  # Number of years in the dataset
                  ):
         super().__init__()
 
+        self.n_tickers = n_tickers
+        self.n_inp_tokens = n_inp_tokens
+        self.backcast_size = backcast_size
+        assert n_inp_tokens % n_tickers == 0, "Number of tokens must be divisible by number of tickers"
+        self.tokens_per_var = n_inp_tokens // n_tickers
+        assert backcast_size % self.tokens_per_var == 0, "Backcast size must be divisible by number of tokens"
+        self.token_len = backcast_size // self.tokens_per_var
+
         # Token Embeddings (for ticker IDs)
-        self.token_embed = nn.Embedding(n_tickers + 1, embed_dim) # adding 1 for mask
+        self.token_embed = nn.Embedding(n_inp_tokens + 1, embed_dim) # adding 1 for mask
 
         # Positional Embeddings
-        self.pos_embed = nn.Embedding(max_seq_len, embed_dim)
+        self.pos_embed = nn.Embedding(n_tickers, embed_dim)
 
         # Time Embeddings
         self.hour_embed = nn.Embedding(24, embed_dim)
@@ -73,7 +82,7 @@ class StockBert(nn.Module):
 
         # Continuous Feature Embeddings
         # This maps continuous features to the same space as token embeddings.
-        self.cont_feat_proj = nn.Linear(backcast_size, embed_dim)
+        self.cont_feat_proj = nn.Linear(self.token_len, embed_dim)
 
         # Transformer Encoder
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim,
@@ -83,27 +92,37 @@ class StockBert(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
         # MLM Head: Project from hidden state back to backcast size
-        self.mlm_head = nn.Linear(embed_dim, backcast_size)
+        self.mlm_head = nn.Linear(embed_dim, self.token_len)
 
     def forward(self, token_ids, cont_feats, time_indices):
         """
-        token_ids: (batch_size, seq_len) LongTensor with ticker or [MASK] IDs
-        cont_feats: (batch_size, seq_len, continuous_feat_dim) continuous features for each token
+        token_ids: (batch_size, token_len) LongTensor with ticker or [MASK] IDs
+        cont_feats: (batch_size, token_len, continuous_feat_dim) continuous features for each token
         time_indices: (batch_size, 3) start time of the sequence, using hour, month, and year
         """
-        batch_size, seq_len = token_ids.size()
+        batch_size, token_len = token_ids.size()  # (1, S, D)
 
         # Token embedding
         token_embeddings = self.token_embed(token_ids)  # (B, L, D)
 
         # Positional embedding
-        positions = torch.arange(seq_len, device=token_ids.device).unsqueeze(0)  # (1, L)
-        pos_embeddings = self.pos_embed(positions)  # (1, L, D)
+        positions = torch.arange(self.n_tickers, device=token_ids.device).unsqueeze(0)  # (1, S)
+        base_pos_embeddings = self.pos_embed(positions)
+        pos_embeddings = base_pos_embeddings.repeat_interleave(self.tokens_per_var, dim=1)  # (B, L, D)
 
         # Time embeddings
-        hour_embeddings = self.hour_embed(time_indices[:, 0])  # (B, D)
-        month_embeddings = self.month_embed(time_indices[:, 1] - 1)  # (B, D)
-        year_embeddings = self.year_embed(2024 - time_indices[:, 2])  # (B, D)
+        hour_embeddings_base = self.hour_embed(time_indices[..., 0])  # (B, NT, D)
+        month_embeddings_base = self.month_embed(time_indices[..., 1] - 1)  # (B, NT, D)
+        year_embeddings_base = self.year_embed(2027 - time_indices[..., 2])  # (B, NT, D)
+
+        if len(hour_embeddings_base.shape) == 2:
+            hour_embeddings_base = hour_embeddings_base.unsqueeze(1)
+            month_embeddings_base = month_embeddings_base.unsqueeze(1)
+            year_embeddings_base = year_embeddings_base.unsqueeze(1)
+
+        hour_embeddings = hour_embeddings_base.repeat(1, self.n_tickers, 1)  # (B, L, D)
+        month_embeddings = month_embeddings_base.repeat(1, self.n_tickers, 1)  # (B, L, D)
+        year_embeddings = year_embeddings_base.repeat(1, self.n_tickers, 1)  # (B, L, D)
 
         # Continuous feature embeddings
         cont_embeddings = self.cont_feat_proj(cont_feats)  # (B, L, D)
@@ -116,9 +135,9 @@ class StockBert(nn.Module):
         # print('hour_embeddings:', hour_embeddings.shape)
 
         # Combine embeddings: sum token embeddings, continuous embeddings, and positional embeddings
-        x = token_embeddings + cont_embeddings + pos_embeddings + 0.3 * (hour_embeddings +
-                                                                         month_embeddings +
-                                                                         year_embeddings).unsqueeze(1)
+        x = token_embeddings + cont_embeddings + pos_embeddings + ((hour_embeddings +
+                                                                    month_embeddings +
+                                                                    year_embeddings) / 3)
 
         # Pass through transformer
         # Note: For nn.TransformerEncoder we can pass src_key_padding_mask (B,L) with True=pad
@@ -166,8 +185,8 @@ def main(config_path: str = ''):
         elif isinstance(m, nn.Embedding):
             init.normal_(m.weight, mean=0, std=config.init_weight_magnitude)
 
-    n_tickers = 8 if not config.group_len else 8 * config.group_len
-    model = StockBert(n_tickers=n_tickers,
+    n_tickers = 8 * (config.backcast_size // config.group_len) if config.group_len else 8
+    model = StockBert(n_inp_tokens=n_tickers,
                       embed_dim=config.nhid,
                       n_heads=config.nhead,
                       num_layers=config.nlayers,
