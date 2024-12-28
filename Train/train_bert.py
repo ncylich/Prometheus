@@ -94,17 +94,17 @@ def train_naive_models(train_loader, test_loader, criterion, device='cuda'):
     optimizer = NoOpOptimizer()
     criterion = CriterionNoBackward(criterion)
 
-    print("Training The Naive Zero-Model")
+    print("Testing The Naive Zero-Model")
     model = NaiveModel(zeros=True).to(device)
     train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
     print("X" * 60)
 
-    print("Training The Naive Duplicating-Input-Model")
+    print("Testing The Naive Duplicating-Input-Model")
     model = NaiveModel(same_as_input=True).to(device)
     train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
     print("X" * 60)
 
-    print(f"Training naive models took {time.time() - start:.2f} seconds\n")
+    print(f"Testing naive models took {time.time() - start:.2f} seconds\n")
 
 
 def train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):

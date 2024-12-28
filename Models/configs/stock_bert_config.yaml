@@ -1,5 +1,5 @@
 forecast_size: 16
-backcast_size: 48  # 16 * 2
+backcast_size: 48  # 16 * 3
 
 factor: 1
 group_len: 4
