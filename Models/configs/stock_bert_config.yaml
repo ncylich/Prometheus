@@ -2,8 +2,7 @@ forecast_size: 16
 backcast_size: 48  # 16 * 2
 
 factor: 1
-
-seq_len: 64  # backcast_size + forecast_size
+group_len: 4
 nhid: 128
 nhead: 8
 dim_feedfwd: 512

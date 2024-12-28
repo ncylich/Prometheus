@@ -32,6 +32,8 @@ def load_config_from_json_or_yaml(filepath: str, config_class):
         tp = type(getattr(config, key, value))
         setattr(config, key, tp(value))  # Convert to the same type as the default
 
+    config.seq_len = config.backcast_size + config.forecast_size
+
     return config
 
 def load_config_from_xml(filepath: str, config_class):
