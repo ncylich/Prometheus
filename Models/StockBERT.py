@@ -166,7 +166,8 @@ def main(config_path: str = ''):
         elif isinstance(m, nn.Embedding):
             init.normal_(m.weight, mean=0, std=config.init_weight_magnitude)
 
-    model = StockBert(n_tickers=8,
+    n_tickers = 8 if not config.group_len else 8 * config.group_len
+    model = StockBert(n_tickers=n_tickers,
                       embed_dim=config.nhid,
                       n_heads=config.nhead,
                       num_layers=config.nlayers,

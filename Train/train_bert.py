@@ -1,4 +1,4 @@
-from time import sleep
+import time
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -9,12 +9,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 def process_batch(model, x, time, mask_prob, device):
-    num_tickers = 8  # Sequence length (number of ticker tokens)
-    mask_token_id = 8  # ID for the [MASK] token
+    num_tickers = x.size(-2)  # Sequence length (number of ticker tokens), -2nd dim of X
+    mask_token_id = num_tickers  # ID for the [MASK] token
 
     x = x.to(device)  # (B, 2, L, F) where L=num_tickers, F=backcast_size
     time = time.to(device)  # (B, 3) - [hour, month, year]
@@ -88,16 +85,23 @@ class CriterionNoBackward(nn.Module):
     def backward(self, predictions, targets):
         pass
 
-def test_zero_model(train_loader, test_loader, criterion, device='cuda'):
+def train_naive_models(train_loader, test_loader, criterion, device='cuda'):
+    start = time.time()
+
     optimizer = NoOpOptimizer()
     criterion = CriterionNoBackward(criterion)
 
+    print("Training The Naive Zero-Model")
     model = NaiveModel(zeros=True).to(device)
     train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
     print("X" * 60)
+
+    print("Training The Naive Duplicating-Input-Model")
     model = NaiveModel(same_as_input=True).to(device)
     train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
-    print("X" * 60, '\n')
+    print("X" * 60)
+
+    print(f"Training naive models took {time.time() - start:.2f} seconds\n")
 
 
 def train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
@@ -141,5 +145,5 @@ def train_model_base(model, train_loader, test_loader, criterion, optimizer, sch
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
-    test_zero_model(train_loader, test_loader, criterion, device)
+    train_naive_models(train_loader, test_loader, criterion, device)  # Get a baseline before training
     return train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device)
