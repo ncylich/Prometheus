@@ -186,4 +186,4 @@ def main(config_path: str = ''):
 
 
 if __name__ == '__main__':
-    main()
+    main('/Users/noahcylich/Documents/Professional/Prometheus/Models/configs/stock_bert_config.yaml')

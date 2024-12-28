@@ -38,7 +38,8 @@ class StockDataset(Dataset):
         self.velocities = {}
         for ticker in tickers:
             prices = data[f'{ticker}_{predict_col}'].to_numpy()
-            velocity = prices[1:] / prices[:-1]
+            # velocity = prices[1:] / prices[:-1]
+            velocity = prices.copy()
 
             assert not np.isnan(prices).any()
             assert not np.isnan(velocity).any()
