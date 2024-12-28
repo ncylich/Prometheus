@@ -153,7 +153,7 @@ def main(config_path: str = ''):
     config = update_config_with_factor(config)
 
     train_loader, test_loader = get_long_term_Xmin_data_loaders(config.backcast_size, config.forecast_size,
-                                                                x_min=30, batch_size=config.batch_size)
+                                                                config.group_len, x_min=30, batch_size=config.batch_size)
 
     def init_weights(m):
         if isinstance(m, nn.Linear):
@@ -186,4 +186,4 @@ def main(config_path: str = ''):
 
 
 if __name__ == '__main__':
-    main('/Users/noahcylich/Documents/Professional/Prometheus/Models/configs/stock_bert_config.yaml')
+    main('configs/stock_bert_config.yaml')

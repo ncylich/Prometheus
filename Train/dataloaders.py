@@ -130,19 +130,49 @@ class StockDataset(Dataset):
         std = np.std(data)
         return mean, std
 
+class TokenStockDataset(Dataset):
+    def __init__(self, data, backcast_size, forecast_size, token_len, training_set, predict_col='close', tickers=None, log_vols=False):
+        assert backcast_size % token_len == 0, f'Backcast size must be divisible by token_len: {backcast_size} % {token_len} != 0'
+        self.stock_dataset = StockDataset(data, token_len, forecast_size, training_set, predict_col, tickers, log_vols)
+        self.backcast_size = backcast_size
+        self.forecast_size = forecast_size
+        self.num_tokens = backcast_size // token_len
+        self.token_len = token_len
+
+    def __len__(self):
+        return len(self.stock_dataset.velocities[self.stock_dataset.tickers[0]]) - self.backcast_size - self.forecast_size
+
+    def __getitem__(self, idx):
+        xs = []
+        times = []
+        y = None
+        for i in range(self.num_tokens):
+            x, y, time = self.stock_dataset[idx + i * self.token_len]
+            xs.append(x)
+            times.append(time)
+
+        x = torch.stack(xs)  # Shape: [num_tokens, 2, num_tickers, token_len]
+        x = x.permute(1, 2, 0, 3)  # Shape: [2, num_tickers, num_tokens, token_len]
+        x = x.reshape(2, -1, self.token_len)  # Shape: [2, num_tickers * num_tokens, token_len]
+
+        time = torch.stack(times)  # Shape: [num_tokens, 3]
+
+        return x, y, time
+
 def test_train_split(df, test_size_ratio=.2):
     test_len = int(len(df) * test_size_ratio)
     return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
 
 # mock dataloader
-def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, x_min=5, test_size_ratio=.2, batch_size=512,
-                                    dataset_col='close', head_prop = .1):
+def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, group_len, x_min=5, test_size_ratio=.2,
+                                    batch_size=512, dataset_col='close', head_prop = .1):
     dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
-    return get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio, batch_size, dataset_col,
+    return get_long_term_data_loaders(backcast_size, forecast_size, group_len, test_size_ratio, batch_size, dataset_col,
                                       dataset_path, head_prop)
 
-def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
-                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1,):
+def get_long_term_data_loaders(backcast_size, forecast_size, group_len, test_size_ratio=.2, batch_size=512,
+    dataset_col='close', dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1,):
+
     path_dirs = os.getcwd().split('/')[::-1]
     try:
         prometheus_idx = path_dirs.index('Prometheus')
@@ -155,8 +185,12 @@ def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2,
 
     train_data, test_data = test_train_split(data, test_size_ratio)
 
-    train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col)
-    test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col)
+    if group_len:
+        train_dataset = TokenStockDataset(train_data, backcast_size, forecast_size, group_len, True, predict_col=dataset_col)
+        test_dataset = TokenStockDataset(test_data, backcast_size, forecast_size, group_len, False, predict_col=dataset_col)
+    else:
+        train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col)
+        test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col)
 
     data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=1024, shuffle=True)
@@ -175,7 +209,7 @@ Residual Stds: tensor([7.1884e-07, 4.8953e-08, 1.7324e-06, 8.6941e-08, 3.9700e-0
 Changes Loss: tensor(0.0029, dtype=torch.float64)
 Std Loss: tensor(2.4396e-05, dtype=torch.float64)
 '''
-if __name__ == '__main__':
+def test_main():
     data_loader, test_loader = get_long_term_Xmin_data_loaders(1, 36, x_min=5, batch_size=1)
     mean_change = torch.zeros(8)
     mean_std = torch.zeros(8)
@@ -208,3 +242,6 @@ if __name__ == '__main__':
     print('Residual Stds:', residual_stds)
     print('Changes Loss:', changes_loss)
     print('Std Loss:', stds_loss)
+
+if __name__ == '__main__':
+    test_main()

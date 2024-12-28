@@ -1,5 +1,6 @@
 from time import sleep
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
@@ -51,7 +52,55 @@ def process_batch(model, x, time, mask_prob, device):
 
     return masked_predictions, masked_targets
 
-def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
+class NaiveModel(nn.Module):
+    def __init__(self, zeros=False, same_as_input=False):
+        assert zeros ^ same_as_input, "zeros or same_as_input must be true, but not both"
+        super(NaiveModel, self).__init__()
+        self.zeros = zeros
+        self.same_as_input = same_as_input
+
+    def forward(self, token_ids, cont_feats, time_indices):
+        if self.zeros:
+            return torch.zeros_like(cont_feats)
+        if self.same_as_input:
+            return cont_feats
+
+class NoOpOptimizer(torch.optim.Optimizer):
+    def __init__(self):
+        self.param_groups = []
+
+    def step(self, closure=None):
+        pass
+
+    def zero_grad(self, set_to_none=False):
+        pass
+
+class CriterionNoBackward(nn.Module):
+    def __init__(self, base_criterion):
+        super().__init__()
+        self.base_criterion = base_criterion
+
+    def forward(self, predictions, targets):
+        loss = self.base_criterion(predictions, targets)
+        loss.requires_grad_(True)  # Ensure the loss tensor requires gradients
+        return loss
+
+    def backward(self, predictions, targets):
+        pass
+
+def test_zero_model(train_loader, test_loader, criterion, device='cuda'):
+    optimizer = NoOpOptimizer()
+    criterion = CriterionNoBackward(criterion)
+
+    model = NaiveModel(zeros=True).to(device)
+    train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
+    print("X" * 60)
+    model = NaiveModel(same_as_input=True).to(device)
+    train_model_base(model, train_loader, test_loader, criterion, optimizer, None, epochs=1, device=device)
+    print("X" * 60, '\n')
+
+
+def train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
     model = model.to(device)
     mask_prob = 0.15  # Probability of masking a token (15% is common in BERT)
 
@@ -89,3 +138,8 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             scheduler.step(val_loss)
 
         print(f"Epoch [{epoch + 1}/{epochs}] - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
+
+
+def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
+    test_zero_model(train_loader, test_loader, criterion, device)
+    return train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device)
