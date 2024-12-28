@@ -135,13 +135,13 @@ def test_train_split(df, test_size_ratio=.2):
 
 # mock dataloader
 def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, x_min=5, test_size_ratio=.2, batch_size=512,
-                                    dataset_col='close', head_prop = .25):
+                                    dataset_col='close', head_prop = .1):
     dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
     return get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio, batch_size, dataset_col,
                                       dataset_path, head_prop)
 
 def get_long_term_data_loaders(backcast_size, forecast_size, test_size_ratio=.2, batch_size=512, dataset_col='close',
-                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.25,):
+                        dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1,):
     path_dirs = os.getcwd().split('/')[::-1]
     try:
         prometheus_idx = path_dirs.index('Prometheus')

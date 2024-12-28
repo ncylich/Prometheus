@@ -172,7 +172,8 @@ def main(config_path: str = ''):
                       num_layers=config.nlayers,
                       backcast_size=config.backcast_size).to(device)
 
-    model.apply(init_weights)
+    if config.init_weight_magnitude:
+        model.apply(init_weights)
 
     optimizer = AdamW(model.parameters(), lr=config.lr)
 
