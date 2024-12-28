@@ -73,7 +73,8 @@ class StockBert(nn.Module):
         self.token_embed = nn.Embedding(n_inp_tokens + 1, embed_dim) # adding 1 for mask
 
         # Positional Embeddings
-        self.pos_embed = nn.Embedding(n_tickers, embed_dim)
+        self.ticker_embedding = nn.Embedding(n_tickers, embed_dim)
+        self.pos_embedding = nn.Embedding(self.tokens_per_var, embed_dim)
 
         # Time Embeddings
         self.hour_embed = nn.Embedding(24, embed_dim)
@@ -106,9 +107,13 @@ class StockBert(nn.Module):
         token_embeddings = self.token_embed(token_ids)  # (B, L, D)
 
         # Positional embedding
-        positions = torch.arange(self.n_tickers, device=token_ids.device).unsqueeze(0)  # (1, S)
-        base_pos_embeddings = self.pos_embed(positions)
-        pos_embeddings = base_pos_embeddings.repeat_interleave(self.tokens_per_var, dim=1)  # (B, L, D)
+        tickers = torch.arange(self.n_tickers, device=token_ids.device).unsqueeze(0)  # (1, NT)
+        base_ticker_embeddings = self.ticker_embedding(tickers)
+        ticker_embeddings = base_ticker_embeddings.repeat_interleave(self.tokens_per_var, dim=1)  # (1, L, D)
+
+        positions = torch.arange(self.tokens_per_var, device=token_ids.device).unsqueeze(0)  # (1, TPV)
+        base_pos_embeddings = self.pos_embedding(positions)  # (1, TPV, D)
+        pos_embeddings = base_pos_embeddings.repeat(1, self.n_tickers, 1)  # (1, L, D)
 
         # Time embeddings
         hour_embeddings_base = self.hour_embed(time_indices[..., 0])  # (B, NT, D)
@@ -131,13 +136,13 @@ class StockBert(nn.Module):
         # # print all shapes
         # print('token_embeddings:', token_embeddings.shape)
         # print('cont_embeddings:', cont_embeddings.shape)
-        # print('pos_embeddings:', pos_embeddings.shape)
+        # print('ticker_embeddings:', ticker_embeddings.shape)
         # print('hour_embeddings:', hour_embeddings.shape)
 
         # Combine embeddings: sum token embeddings, continuous embeddings, and positional embeddings
-        x = token_embeddings + cont_embeddings + pos_embeddings + ((hour_embeddings +
-                                                                    month_embeddings +
-                                                                    year_embeddings) / 3)
+        x = token_embeddings + cont_embeddings + ticker_embeddings + pos_embeddings + ((hour_embeddings +
+                                                                                        month_embeddings +
+                                                                                        year_embeddings) / 3)
 
         # Pass through transformer
         # Note: For nn.TransformerEncoder we can pass src_key_padding_mask (B,L) with True=pad
