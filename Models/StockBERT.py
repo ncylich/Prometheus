@@ -152,10 +152,8 @@ def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
     config = update_config_with_factor(config)
 
-    train_loader, test_loader = get_long_term_Xmin_data_loaders(config.backcast_size,
-                                                                config.forecast_size,
-                                                                x_min=5,
-                                                                batch_size=config.batch_size)
+    train_loader, test_loader = get_long_term_Xmin_data_loaders(config.backcast_size, config.forecast_size,
+                                                                x_min=30, batch_size=config.batch_size)
 
     def init_weights(m):
         if isinstance(m, nn.Linear):
