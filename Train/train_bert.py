@@ -88,11 +88,12 @@ class CriterionNoBackward(nn.Module):
     def backward(self, predictions, targets):
         pass
 
-def train_naive_models(train_loader, test_loader, criterion, device='cuda'):
+def train_naive_models(train_loader, test_loader, criterion):
     start = time.time()
 
     optimizer = NoOpOptimizer()
     criterion = CriterionNoBackward(criterion)
+    device = torch.device("cpu")
 
     print("Testing The Naive Zero-Model")
     model = NaiveModel(zeros=True).to(device)
@@ -149,5 +150,5 @@ def train_model_base(model, train_loader, test_loader, criterion, optimizer, sch
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
     if not skip_naive:
-        train_naive_models(train_loader, test_loader, criterion, device)  # Get a baseline before training
+        train_naive_models(train_loader, test_loader, criterion)  # Get a baseline before training
     return train_model_base(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device)
