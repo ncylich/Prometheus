@@ -1,3 +1,4 @@
+import sys
 import time
 import torch
 from torch import nn
@@ -9,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-skip_naive = True
+skip_naive = not 'google.colab' in sys.modules
 
 def process_batch(model, x, time, mask_prob, device):
     num_tickers = x.size(-2)  # Sequence length (number of ticker tokens), -2nd dim of X
