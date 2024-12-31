@@ -3,6 +3,10 @@ import pandas as pd
 interval = 1
 prop = .1
 
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', 100)
+
 df = pd.read_parquet(f'../Local_Data/{interval}min_long_term_merged_UNadjusted.parquet')
 tickers = [col for col in df.columns if col.endswith('_close')]
 df = df.tail(int(len(df) * prop))
