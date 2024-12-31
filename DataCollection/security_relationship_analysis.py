@@ -134,6 +134,10 @@ def plot_heat_map(matrix, title='Heat Map'):
     plt.xticks(ticks=np.arange(matrix.shape[0]), labels=matrix.columns, rotation=0, ha='center')
     plt.yticks(ticks=np.arange(matrix.shape[0]), labels=matrix.columns, rotation=0, ha='right')
 
+    # moving x-axis labels to top
+    plt.gca().xaxis.set_ticks_position('top')
+    plt.gca().xaxis.set_label_position('top')
+
     plt.tight_layout()
     plt.show()
 
