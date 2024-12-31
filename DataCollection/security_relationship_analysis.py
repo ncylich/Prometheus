@@ -4,6 +4,8 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sqlalchemy.dialects.mssql.information_schema import sequences
 from statsmodels.tsa.stattools import grangercausalitytests, coint
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 import contextlib
@@ -105,6 +107,36 @@ def test():
     cointegration_test(data, 'A', 'B')
     dynamic_time_warping(data, 'A', 'B')
 
+def plot_2d_graph(df, title='2D Graph'):
+    cmap = plt.colormaps.get_cmap('tab20')
+    colors = [cmap(i) for i in range(len(df.columns))]
+    ax = df.T.plot(kind='bar', figsize=(10, 6), width=0.8)
+    for i, bar in enumerate(ax.patches):
+        bar.set_color(colors[i % len(colors)])
+    ax.set_title(title)
+    ax.set_xlabel('Columns')
+    ax.set_ylabel('Values')
+    ax.set_xticks(range(len(df.columns)))
+    ax.set_xticklabels(df.columns, rotation=45, ha='right')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+def plot_heat_map(matrix, title='Heat Map'):
+    plt.figure(figsize=(10, 8))
+    plt.imshow(matrix, cmap='viridis', aspect='auto')
+    plt.colorbar(label='Height')
+    plt.title(title)
+    plt.xlabel('Columns')
+    plt.ylabel('Columns')
+
+    assert matrix.shape[0] == matrix.shape[1]
+    plt.xticks(ticks=np.arange(matrix.shape[0]), labels=matrix.columns, rotation=0, ha='center')
+    plt.yticks(ticks=np.arange(matrix.shape[0]), labels=matrix.columns, rotation=0, ha='right')
+
+    plt.tight_layout()
+    plt.show()
+
 def main():
     interval = 30
     prop = .1
@@ -122,27 +154,31 @@ def main():
     df = df.rename(columns={col: col.split('_')[0] for col in df.columns})
 
     corr_matrix = df.corr()
-    multivar_reg = pd.DataFrame({col: [multivariate_regression(df, col)] for col in df.columns})
-    granger_results = mat_results(df, granger_causality, max_lag=5)  # takes longest by far
-    coint_results = mat_results(df, cointegration_test)
-    dtw_results = mat_results(df, dynamic_time_warping)
-
+    plot_heat_map(corr_matrix, 'Correlation Coefficient Matrix')
     print('Correlation Coeff Mat')
     print(corr_matrix)
     print('X' * 100, '\n')
 
+    multivar_reg = pd.DataFrame({col: [multivariate_regression(df, col)] for col in df.columns})
+    plot_2d_graph(multivar_reg, 'Multivariate DataFrame Plot')
     print('Multivariate Correlation Coefficients (each col with respect to ALL of the others)')
     print(multivar_reg)
     print('X' * 100, '\n')
 
+    granger_results = mat_results(df, granger_causality, max_lag=5)  # takes longest by far
+    plot_heat_map(granger_results, 'Granger Causality Matrix')
     print('Granger Causality Results')
     print(granger_results)
     print('X' * 100, '\n')
 
+    coint_results = mat_results(df, cointegration_test)
+    plot_heat_map(coint_results, 'Cointegration Matrix')
     print('Cointegration Results')
     print(coint_results)
     print('X' * 100, '\n')
 
+    dtw_results = mat_results(df, dynamic_time_warping)
+    plot_heat_map(dtw_results, 'Dynamic Time Warping Matrix')
     print('Dynamic Time Warping Results')
     print(dtw_results)
     print('X' * 100, '\n')
