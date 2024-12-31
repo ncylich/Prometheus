@@ -181,8 +181,8 @@ def main():
     print(coint_results)
     print('X' * 100, '\n')
 
-    dtw_results = mat_results(df, dynamic_time_warping)
-    plot_heat_map(dtw_results, 'Dynamic Time Warping Matrix')
+    dtw_results = np.log(mat_results(df, dynamic_time_warping) + 1)  # Log transform for better visualization, add 1 to avoid log(0)
+    plot_heat_map(dtw_results, 'Natural-Log of Dynamic Time Warping Matrix')
     print('Dynamic Time Warping Results')
     print(dtw_results)
     print('X' * 100, '\n')
