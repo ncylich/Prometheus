@@ -33,6 +33,7 @@ class Config:
 
     factor: int = 2
     seq_len: int = backcast_size + forecast_size
+    token_len: int = 0
     nhid: int = 128
     nhead: int = 8
     dim_feedfwd: int = 512
@@ -177,7 +178,7 @@ def main(config_path: str = ''):
     config = update_config_with_factor(config)
 
     train_loader, test_loader = get_long_term_Xmin_data_loaders(config.backcast_size, config.forecast_size,
-                                                                config.group_len, x_min=30, batch_size=config.batch_size)
+                                                                config.token_len, x_min=30, batch_size=config.batch_size)
 
     def init_weights(m):
         if isinstance(m, nn.Linear):
@@ -190,7 +191,7 @@ def main(config_path: str = ''):
         elif isinstance(m, nn.Embedding):
             init.normal_(m.weight, mean=0, std=config.init_weight_magnitude)
 
-    n_tickers = 8 * (config.backcast_size // config.group_len) if config.group_len else 8
+    n_tickers = 8 * (config.backcast_size // config.token_len) if config.token_len else 8
     model = StockBert(n_inp_tokens=n_tickers,
                       embed_dim=config.nhid,
                       n_heads=config.nhead,

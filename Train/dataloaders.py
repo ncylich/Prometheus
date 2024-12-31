@@ -164,14 +164,14 @@ def test_train_split(df, test_size_ratio=.2):
     return df.head(len(df) - test_len).copy(), df.tail(test_len).copy()
 
 # mock dataloader
-def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, group_len, x_min=5, test_size_ratio=.2,
+def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, token_len, x_min=5, test_size_ratio=.2,
                                     batch_size=512, dataset_col='close', head_prop = .1):
     dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
-    return get_long_term_data_loaders(backcast_size, forecast_size, group_len, test_size_ratio, batch_size, dataset_col,
+    return get_long_term_data_loaders(backcast_size, forecast_size, token_len, test_size_ratio, batch_size, dataset_col,
                                       dataset_path, head_prop)
 
-def get_long_term_data_loaders(backcast_size, forecast_size, group_len, test_size_ratio=.2, batch_size=512,
-    dataset_col='close', dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1,):
+def get_long_term_data_loaders(backcast_size, forecast_size, token_len, test_size_ratio=.2, batch_size=512,
+                               dataset_col='close', dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1, ):
 
     path_dirs = os.getcwd().split('/')[::-1]
     try:
@@ -185,9 +185,9 @@ def get_long_term_data_loaders(backcast_size, forecast_size, group_len, test_siz
 
     train_data, test_data = test_train_split(data, test_size_ratio)
 
-    if group_len:
-        train_dataset = TokenStockDataset(train_data, backcast_size, forecast_size, group_len, True,predict_col=dataset_col)
-        test_dataset = TokenStockDataset(test_data, backcast_size, forecast_size, group_len, False, predict_col=dataset_col)
+    if token_len:
+        train_dataset = TokenStockDataset(train_data, backcast_size, forecast_size, token_len, True, predict_col=dataset_col)
+        test_dataset = TokenStockDataset(test_data, backcast_size, forecast_size, token_len, False, predict_col=dataset_col)
     else:
         train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col)
         test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col)
