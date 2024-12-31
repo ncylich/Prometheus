@@ -157,15 +157,15 @@ def main():
     df = df[tickers]  # remove all columns that are not tickers
     df = df.rename(columns={col: col.split('_')[0] for col in df.columns})
 
-    corr_matrix = df.corr()
-    plot_heat_map(corr_matrix, 'Correlation Coefficient Matrix')
-    print('Correlation Coeff Mat')
-    print(corr_matrix)
+    rsq_matrix = df.corr() ** 2
+    plot_heat_map(rsq_matrix, 'R-Squared Matrix')
+    print('R-Squared Mat')
+    print(rsq_matrix)
     print('X' * 100, '\n')
 
     multivar_reg = pd.DataFrame({col: [multivariate_regression(df, col)] for col in df.columns})
-    plot_2d_graph(multivar_reg, 'Multivariate DataFrame Plot')
-    print('Multivariate Correlation Coefficients (each col with respect to ALL of the others)')
+    plot_2d_graph(multivar_reg, 'Multivariate R-Squared Values')
+    print('Multivariate R-Squared Values (each col with respect to ALL of the others)')
     print(multivar_reg)
     print('X' * 100, '\n')
 
