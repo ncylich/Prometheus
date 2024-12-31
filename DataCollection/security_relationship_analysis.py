@@ -114,7 +114,7 @@ def plot_2d_graph(df, title='2D Graph'):
     for i, bar in enumerate(ax.patches):
         bar.set_color(colors[i % len(colors)])
     ax.set_title(title)
-    ax.set_xlabel('Columns')
+    ax.set_xlabel('Tickers')
     ax.set_ylabel('Values')
     ax.set_xticks(range(len(df.columns)))
     ax.set_xticklabels(df.columns, rotation=45, ha='right')
@@ -127,8 +127,8 @@ def plot_heat_map(matrix, title='Heat Map'):
     plt.imshow(matrix, cmap='viridis', aspect='auto')
     plt.colorbar(label='Height')
     plt.title(title)
-    plt.xlabel('Columns')
-    plt.ylabel('Columns')
+    plt.xlabel('Tickers')
+    plt.ylabel('Tickers')
 
     assert matrix.shape[0] == matrix.shape[1]
     plt.xticks(ticks=np.arange(matrix.shape[0]), labels=matrix.columns, rotation=0, ha='center')
