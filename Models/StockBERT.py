@@ -42,6 +42,8 @@ class Config:
     batch_size: int = 1024
     test_col: str = 'close'
 
+    group_len: int = 0
+
     lr = 1e-3
     epochs = 100
     init_weight_magnitude = 1e-3  # / (factor ** 2)

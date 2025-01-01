@@ -53,6 +53,7 @@ def load_config_from_xml(filepath: str, config_class):
     return config
 
 def update_config_with_factor(config):
-    config.nhid *= config.factor
-    config.dim_feedfwd *= config.factor
+    if hasattr(config, 'factor'):
+        config.nhid *= config.factor
+        config.dim_feedfwd *= config.factor
     return config
