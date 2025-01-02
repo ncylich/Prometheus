@@ -24,16 +24,12 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     sequence_len: int = 16
-    backcast_size: int = 16
-    forecast_size: int = 16
 
     latent_dim: int = 16
     use_dct: bool = False
     num_tickers: int = 8
     embed_dim: int = 128
 
-    n_heads: int = 4
-    num_layers: int = 2
     ff_dim: int = 256
     batch_size: int = 1024
     lr: float = 1e-3
@@ -42,6 +38,7 @@ class Config:
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class StockVAE(nn.Module):
     def __init__(self, num_tickers=8, sequence_len=30, latent_dim=16, use_dct=False):
@@ -52,17 +49,42 @@ class StockVAE(nn.Module):
         self.use_dct = use_dct
 
         # Encoder
-        self.conv1 = nn.Conv1d(num_tickers, 16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.fc1 = nn.Linear(32 * sequence_len, 128)
-        self.fc2_mu = nn.Linear(128, latent_dim)
-        self.fc2_logvar = nn.Linear(128, latent_dim)
+        self.encoder = nn.Sequential(
+            nn.Conv1d(num_tickers, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 2
+            nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 4
+            nn.Conv1d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 8
+        )
+        self.fc1 = nn.Linear(128 * (sequence_len // 8), 256)
+        self.fc2_mu = nn.Linear(256, latent_dim)
+        self.fc2_logvar = nn.Linear(256, latent_dim)
 
         # Decoder
-        self.fc3 = nn.Linear(latent_dim, 128)
-        self.fc4 = nn.Linear(128, 32 * sequence_len)
-        self.deconv1 = nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1)
-        self.deconv2 = nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1)
+        self.fc3 = nn.Linear(latent_dim, 256)
+        self.fc4 = nn.Linear(256, 128 * (sequence_len // 8))
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(128, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2),  # Upsample to sequence_len // 4
+            nn.ConvTranspose1d(64, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2),  # Upsample to sequence_len // 2
+            nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2),  # Upsample to sequence_len
+            nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
+        )
 
         # DCT matrices
         self.dct_matrix, self.idct_matrix = self.get_dct_matrix(sequence_len)
@@ -77,7 +99,8 @@ class StockVAE(nn.Module):
                     w = np.sqrt(1 / N)
                 dct_m[k, i] = w * np.cos(np.pi * (i + 1 / 2) * k / N)
         idct_m = np.linalg.inv(dct_m)
-        return dct_m, idct_m
+
+        return torch.tensor(dct_m, dtype=torch.float32), torch.tensor(idct_m, dtype=torch.float32)
 
     def dct_encode(self, x):
         return torch.matmul(x, self.dct_matrix.to(x.device))
@@ -86,9 +109,8 @@ class StockVAE(nn.Module):
         return torch.matmul(x, self.idct_matrix.to(x.device))
 
     def encode(self, x):
-        h = F.relu(self.conv1(x))
-        h = F.relu(self.conv2(h))
-        h = h.view(h.size(0), -1)
+        h = self.encoder(x)
+        h = h.view(h.size(0), -1)  # Flatten
         h = F.relu(self.fc1(h))
         return self.fc2_mu(h), self.fc2_logvar(h)
 
@@ -100,9 +122,8 @@ class StockVAE(nn.Module):
     def decode(self, z):
         h = F.relu(self.fc3(z))
         h = F.relu(self.fc4(h))
-        h = h.view(h.size(0), 32, self.sequence_len)
-        h = F.relu(self.deconv1(h))
-        return torch.sigmoid(self.deconv2(h))
+        h = h.view(h.size(0), 128, self.sequence_len // 8)  # Reshape
+        return torch.sigmoid(self.decoder(h))
 
     def forward(self, x):
         if self.use_dct:

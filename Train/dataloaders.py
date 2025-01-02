@@ -14,7 +14,7 @@ class StockDataset(Dataset):
     ticker_volume_scale_params = {}
 
 
-    def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False):
+    def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False, use_velocity=False):
         if tickers is None:
             tickers = []
             for ticker in [col.split('_')[0] for col in list(data.columns) if '_' in col]:
@@ -35,26 +35,23 @@ class StockDataset(Dataset):
         self.tickers = tickers
         self.prices = {ticker: torch.from_numpy(data[f'{ticker}_{predict_col}'].to_numpy()[1:]) for ticker in tickers}
 
-        self.velocities = {}
+        self.prices = {}
         for ticker in tickers:
             prices = data[f'{ticker}_{predict_col}'].to_numpy()
-            velocity = prices[1:] / prices[:-1]
-            # velocity = prices.copy()
-
+            prices = prices.pct_change()[1:] if use_velocity else prices[1:]
             assert not np.isnan(prices).any()
-            assert not np.isnan(velocity).any()
 
             if training_set:
-                # offset, scale = self.min_max_scale(velocity)
-                offset, scale = self.mean_std_scale(velocity)
+                # offset, scale = self.min_max_scale(prices)
+                offset, scale = self.mean_std_scale(prices)
                 self.ticker_velocity_scale_params[ticker] = (offset, scale)
 
             offset, scale = self.ticker_velocity_scale_params[ticker]
-            velocity = (velocity - offset) / scale
+            prices = (prices - offset) / scale
 
-            assert not np.isnan(velocity).any()
+            assert not np.isnan(prices).any()
 
-            self.velocities[ticker] = torch.from_numpy(velocity).float()
+            self.prices[ticker] = torch.from_numpy(prices).float()
             # # interpolate all nans and infs
             # self.velocities[ticker][torch.isnan(self.velocities[ticker])] = 1
             # self.velocities[ticker][torch.isinf(self.velocities[ticker])] = 1
@@ -77,7 +74,7 @@ class StockDataset(Dataset):
 
     def __len__(self):
         # Takes first ticker and gets the length of the prices
-        return len(self.velocities[next(iter(self.tickers))]) - self.backcast_size - self.forecast_size
+        return len(self.prices[next(iter(self.tickers))]) - self.backcast_size - self.forecast_size
 
     def __getitem__(self, idx):
         x_prices = []
@@ -86,7 +83,7 @@ class StockDataset(Dataset):
         y_stds = []
 
         for ticker in self.tickers:
-            veolicty_seq = self.velocities[ticker][idx: idx + self.backcast_size]
+            veolicty_seq = self.prices[ticker][idx: idx + self.backcast_size]
             volume_seq = self.volumes[ticker][idx: idx + self.backcast_size]
 
             final_input_price = self.prices[ticker][idx + self.backcast_size - 1]
@@ -140,7 +137,7 @@ class TokenStockDataset(Dataset):
         self.token_len = token_len
 
     def __len__(self):
-        return len(self.stock_dataset.velocities[self.stock_dataset.tickers[0]]) - self.backcast_size - self.forecast_size
+        return len(self.stock_dataset.prices[self.stock_dataset.tickers[0]]) - self.backcast_size - self.forecast_size
 
     def __getitem__(self, idx):
         xs = []

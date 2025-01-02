@@ -1,14 +1,12 @@
 sequence_len: 16
-backcast_size: 16
-forecast_size: 16
-latent_dim: 16
-use_dct: false
+
+latent_dim: 32
+use_dct: True
 num_tickers: 8
 embed_dim: 128
-n_heads: 4
-num_layers: 2
+
 ff_dim: 256
-batch_size: 1024
+batch_size: 2048
 lr: 1e-3
 epochs: 100
-init_weight_magnitude: 1e-3
+init_weight_magnitude: 1e-15
