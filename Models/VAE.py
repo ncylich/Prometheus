@@ -41,50 +41,75 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class StockVAE(nn.Module):
-    def __init__(self, num_tickers=8, seq_len=16, latent_dim=16, use_dct=False):
+    def __init__(self, num_tickers=8, seq_len=16, latent_dim=16, use_dct=False, large_model=True):
         super(StockVAE, self).__init__()
         self.num_tickers = num_tickers
         self.seq_len = seq_len
         self.latent_dim = latent_dim
         self.use_dct = use_dct
+        self.large_model = large_model
 
-        # Encoder
-        self.encoder = nn.Sequential(
-            nn.Conv1d(num_tickers, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(32),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 2
-            nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 4
-            nn.Conv1d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 8
-        )
-        self.fc1 = nn.Linear(128 * (seq_len // 8), 256)
-        self.fc2_mu = nn.Linear(256, latent_dim)
-        self.fc2_logvar = nn.Linear(256, latent_dim)
+        if large_model:
+            # Encoder
+            self.encoder = nn.Sequential(
+                nn.Conv1d(num_tickers, 32, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(32),
+                nn.ReLU(),
+                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 2
+                nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(64),
+                nn.ReLU(),
+                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 4
+                nn.Conv1d(64, 128, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(128),
+                nn.ReLU(),
+                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 8
+            )
+            self.fc1 = nn.Linear(128 * (seq_len // 8), 256)
+            self.fc2_mu = nn.Linear(256, latent_dim)
+            self.fc2_logvar = nn.Linear(256, latent_dim)
 
-        # Decoder
-        self.fc3 = nn.Linear(latent_dim, 256)
-        self.fc4 = nn.Linear(256, 128 * (seq_len // 8))
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose1d(128, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to seq_len // 4
-            nn.ConvTranspose1d(64, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(32),
-            nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to seq_len // 2
-            nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(16),
-            nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to seq_len
-            nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
-        )
+            # Decoder
+            self.fc3 = nn.Linear(latent_dim, 256)
+            self.fc4 = nn.Linear(256, 128 * (seq_len // 8))
+            self.decoder = nn.Sequential(
+                nn.ConvTranspose1d(128, 64, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(64),
+                nn.ReLU(),
+                nn.Upsample(scale_factor=2),  # Upsample to seq_len // 4
+                nn.ConvTranspose1d(64, 32, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(32),
+                nn.ReLU(),
+                nn.Upsample(scale_factor=2),  # Upsample to seq_len // 2
+                nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm1d(16),
+                nn.ReLU(),
+                nn.Upsample(scale_factor=2),  # Upsample to seq_len
+                nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
+            )
+        else:
+            # Encoder
+            self.encoder = nn.Sequential(
+                nn.Conv1d(num_tickers, 16, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(),
+            )
+
+            self.fc1 = nn.Linear(32 * seq_len, 128)
+            self.fc2_mu = nn.Linear(128, latent_dim)
+            self.fc2_logvar = nn.Linear(128, latent_dim)
+
+            self.fc3 = nn.Linear(latent_dim, 128)
+            self.fc4 = nn.Linear(128, 32 * seq_len)
+
+            # Decoder
+            self.decoder = nn.Sequential(
+                nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
+                nn.Sigmoid()
+            )
 
         # DCT matrices
         self.dct_matrix, self.idct_matrix = self.get_dct_matrix(seq_len)
@@ -122,7 +147,10 @@ class StockVAE(nn.Module):
     def decode(self, z):
         h = F.relu(self.fc3(z))
         h = F.relu(self.fc4(h))
-        h = h.view(h.size(0), 128, self.seq_len // 8)  # Reshape
+        if self.large_model:
+            h = h.view(h.size(0), 128, self.seq_len // 8)
+        else:
+            h = h.view(h.size(0), 32, self.seq_len)
         return torch.sigmoid(self.decoder(h))
 
     def forward(self, x):
