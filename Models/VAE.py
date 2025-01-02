@@ -23,10 +23,11 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    seq_len: int = 16
+    seq_len: int = 8
+    in_channels: int = 2
 
-    latent_dim: int = 16
-    use_dct: bool = False
+    latent_dim: int = 8
+    use_dct: bool = True
     num_tickers: int = 8
     embed_dim: int = 128
 
@@ -41,7 +42,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class StockVAE(nn.Module):
-    def __init__(self, num_tickers=8, seq_len=16, latent_dim=16, use_dct=False, large_model=True):
+    def __init__(self, num_tickers=8, seq_len=16, latent_dim=16, in_channels=2, use_dct=False, large_model=True):
         super(StockVAE, self).__init__()
         self.num_tickers = num_tickers
         self.seq_len = seq_len
@@ -52,62 +53,62 @@ class StockVAE(nn.Module):
         if large_model:
             # Encoder
             self.encoder = nn.Sequential(
-                nn.Conv1d(num_tickers, 32, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(32),
+                nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(32),
                 nn.ReLU(),
-                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 2
-                nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(64),
+                nn.MaxPool2d(kernel_size=2, stride=2),  # Downsample to seq_len // 2
+                nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(64),
                 nn.ReLU(),
-                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 4
-                nn.Conv1d(64, 128, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(128),
+                nn.MaxPool2d(kernel_size=2, stride=2),  # Downsample to seq_len // 4
+                nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(128),
                 nn.ReLU(),
-                nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 8
+                nn.MaxPool2d(kernel_size=2, stride=2),  # Downsample to seq_len // 8
             )
-            self.fc1 = nn.Linear(128 * (seq_len // 8), 256)
-            self.fc2_mu = nn.Linear(256, latent_dim)
-            self.fc2_logvar = nn.Linear(256, latent_dim)
+            self.fc1 = nn.Linear(128 * (seq_len // 8) * (num_tickers // 8), 128)
+            self.fc2_mu = nn.Linear(128, latent_dim)
+            self.fc2_logvar = nn.Linear(128, latent_dim)
 
             # Decoder
-            self.fc3 = nn.Linear(latent_dim, 256)
-            self.fc4 = nn.Linear(256, 128 * (seq_len // 8))
+            self.fc3 = nn.Linear(latent_dim, 128)
+            self.fc4 = nn.Linear(128, 128 * (seq_len // 8) * (num_tickers // 8))
             self.decoder = nn.Sequential(
-                nn.ConvTranspose1d(128, 64, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(64),
+                nn.ConvTranspose2d(128, 64, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(64),
                 nn.ReLU(),
                 nn.Upsample(scale_factor=2),  # Upsample to seq_len // 4
-                nn.ConvTranspose1d(64, 32, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(32),
+                nn.ConvTranspose2d(64, 32, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(32),
                 nn.ReLU(),
                 nn.Upsample(scale_factor=2),  # Upsample to seq_len // 2
-                nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm1d(16),
+                nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(16),
                 nn.ReLU(),
                 nn.Upsample(scale_factor=2),  # Upsample to seq_len
-                nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
+                nn.ConvTranspose2d(16, in_channels, kernel_size=3, stride=1, padding=1),
             )
         else:
             # Encoder
             self.encoder = nn.Sequential(
-                nn.Conv1d(num_tickers, 16, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(in_channels, 4, kernel_size=3, stride=1, padding=0),
                 nn.ReLU(),
-                nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(4, 8, kernel_size=3, stride=1, padding=0),
                 nn.ReLU(),
             )
 
-            self.fc1 = nn.Linear(32 * seq_len, 128)
-            self.fc2_mu = nn.Linear(128, latent_dim)
-            self.fc2_logvar = nn.Linear(128, latent_dim)
+            self.fc1 = nn.Linear(8 * (seq_len - 4) * (num_tickers - 4), 64)
+            self.fc2_mu = nn.Linear(64, latent_dim)
+            self.fc2_logvar = nn.Linear(64, latent_dim)
 
-            self.fc3 = nn.Linear(latent_dim, 128)
-            self.fc4 = nn.Linear(128, 32 * seq_len)
+            self.fc3 = nn.Linear(latent_dim, 64)
+            self.fc4 = nn.Linear(64, 8 * seq_len * num_tickers)
 
             # Decoder
             self.decoder = nn.Sequential(
-                nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
+                nn.ConvTranspose2d(8, 4, kernel_size=3, stride=1, padding=1),
                 nn.ReLU(),
-                nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
+                nn.ConvTranspose2d(4, in_channels, kernel_size=3, stride=1, padding=1),
                 nn.Sigmoid()
             )
 
@@ -148,9 +149,9 @@ class StockVAE(nn.Module):
         h = F.relu(self.fc3(z))
         h = F.relu(self.fc4(h))
         if self.large_model:
-            h = h.view(h.size(0), 128, self.seq_len // 8)
+            h = h.view(h.size(0), 128, self.num_tickers // 8, self.seq_len // 8)
         else:
-            h = h.view(h.size(0), 32, self.seq_len)
+            h = h.view(h.size(0), 8, self.num_tickers, self.seq_len)
         return torch.sigmoid(self.decoder(h))
 
     def forward(self, x):
@@ -198,7 +199,7 @@ def main(config_path: str = ''):
     def criterion(recon_x, x, mu, logvar):
         MSE = F.mse_loss(recon_x, x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return MSE + KLD
+        return MSE + KLD, MSE, KLD
 
     train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, config.epochs, device)
 
