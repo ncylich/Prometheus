@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    sequence_len: int = 16
+    seq_len: int = 16
 
     latent_dim: int = 16
     use_dct: bool = False
@@ -41,10 +41,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class StockVAE(nn.Module):
-    def __init__(self, num_tickers=8, sequence_len=30, latent_dim=16, use_dct=False):
+    def __init__(self, num_tickers=8, seq_len=16, latent_dim=16, use_dct=False):
         super(StockVAE, self).__init__()
         self.num_tickers = num_tickers
-        self.sequence_len = sequence_len
+        self.seq_len = seq_len
         self.latent_dim = latent_dim
         self.use_dct = use_dct
 
@@ -53,41 +53,41 @@ class StockVAE(nn.Module):
             nn.Conv1d(num_tickers, 32, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 2
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 2
             nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 4
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 4
             nn.Conv1d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to sequence_len // 8
+            nn.MaxPool1d(kernel_size=2, stride=2),  # Downsample to seq_len // 8
         )
-        self.fc1 = nn.Linear(128 * (sequence_len // 8), 256)
+        self.fc1 = nn.Linear(128 * (seq_len // 8), 256)
         self.fc2_mu = nn.Linear(256, latent_dim)
         self.fc2_logvar = nn.Linear(256, latent_dim)
 
         # Decoder
         self.fc3 = nn.Linear(latent_dim, 256)
-        self.fc4 = nn.Linear(256, 128 * (sequence_len // 8))
+        self.fc4 = nn.Linear(256, 128 * (seq_len // 8))
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(128, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to sequence_len // 4
+            nn.Upsample(scale_factor=2),  # Upsample to seq_len // 4
             nn.ConvTranspose1d(64, 32, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to sequence_len // 2
+            nn.Upsample(scale_factor=2),  # Upsample to seq_len // 2
             nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(16),
             nn.ReLU(),
-            nn.Upsample(scale_factor=2),  # Upsample to sequence_len
+            nn.Upsample(scale_factor=2),  # Upsample to seq_len
             nn.ConvTranspose1d(16, num_tickers, kernel_size=3, stride=1, padding=1),
         )
 
         # DCT matrices
-        self.dct_matrix, self.idct_matrix = self.get_dct_matrix(sequence_len)
+        self.dct_matrix, self.idct_matrix = self.get_dct_matrix(seq_len)
 
     def get_dct_matrix(self, N):
         """Calculates DCT Matrix of size N."""
@@ -122,7 +122,7 @@ class StockVAE(nn.Module):
     def decode(self, z):
         h = F.relu(self.fc3(z))
         h = F.relu(self.fc4(h))
-        h = h.view(h.size(0), 128, self.sequence_len // 8)  # Reshape
+        h = h.view(h.size(0), 128, self.seq_len // 8)  # Reshape
         return torch.sigmoid(self.decoder(h))
 
     def forward(self, x):
@@ -143,7 +143,7 @@ def main(config_path: str = ''):
     config = dynamic_load_config(config_path, Config)
     config = update_config_with_factor(config)
 
-    train_loader, test_loader = get_long_term_Xmin_data_loaders(config.sequence_len, config.sequence_len,
+    train_loader, test_loader = get_long_term_Xmin_data_loaders(config.seq_len, config.seq_len,
                                                                 config.num_tickers, x_min=30, batch_size=config.batch_size)
 
     def init_weights(m):
@@ -155,7 +155,7 @@ def main(config_path: str = ''):
             init.normal_(m.weight, mean=0, std=config.init_weight_magnitude)
 
     model = StockVAE(num_tickers=config.num_tickers,
-                     sequence_len=config.sequence_len,
+                     seq_len=config.seq_len,
                      latent_dim=config.latent_dim,
                      use_dct=config.use_dct).to(device)
 

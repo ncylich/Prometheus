@@ -1,6 +1,5 @@
-sequence_len: 16
-
-latent_dim: 32
+seq_len: 16
+latent_dim: 16
 use_dct: True
 num_tickers: 8
 embed_dim: 128
@@ -9,4 +8,4 @@ ff_dim: 256
 batch_size: 2048
 lr: 1e-3
 epochs: 100
-init_weight_magnitude: 1e-15
+init_weight_magnitude: 1e-3
