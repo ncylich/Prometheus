@@ -128,9 +128,9 @@ class StockDataset(Dataset):
         return mean, std
 
 class TokenStockDataset(Dataset):
-    def __init__(self, data, backcast_size, forecast_size, token_len, training_set, predict_col='close', tickers=None, log_vols=False):
+    def __init__(self, data, backcast_size, forecast_size, token_len, training_set, predict_col='close', tickers=None, log_vols=False, use_velocity=False):
         assert backcast_size % token_len == 0, f'Backcast size must be divisible by token_len: {backcast_size} % {token_len} != 0'
-        self.stock_dataset = StockDataset(data, token_len, forecast_size, training_set, predict_col, tickers, log_vols)
+        self.stock_dataset = StockDataset(data, token_len, forecast_size, training_set, predict_col, tickers, log_vols, use_velocity)
         self.backcast_size = backcast_size
         self.forecast_size = forecast_size
         self.num_tokens = backcast_size // token_len
@@ -162,13 +162,14 @@ def test_train_split(df, test_size_ratio=.2):
 
 # mock dataloader
 def get_long_term_Xmin_data_loaders(backcast_size, forecast_size, token_len, x_min=5, test_size_ratio=.2,
-                                    batch_size=512, dataset_col='close', head_prop = .1):
+                                    batch_size=512, dataset_col='close', head_prop = .1, use_velocity=False):
     dataset_path = f'Prometheus/Local_Data/{x_min}min_long_term_merged_UNadjusted.parquet'
     return get_long_term_data_loaders(backcast_size, forecast_size, token_len, test_size_ratio, batch_size, dataset_col,
-                                      dataset_path, head_prop)
+                                      dataset_path, head_prop, use_velocity)
 
 def get_long_term_data_loaders(backcast_size, forecast_size, token_len, test_size_ratio=.2, batch_size=512,
-                               dataset_col='close', dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet', head_prop=.1, ):
+                               dataset_col='close', dataset_path='Prometheus/Local_Data/5min_long_term_merged_UNadjusted.parquet',
+                               head_prop=.1, use_velocity=False):
 
     path_dirs = os.getcwd().split('/')[::-1]
     try:
@@ -183,11 +184,11 @@ def get_long_term_data_loaders(backcast_size, forecast_size, token_len, test_siz
     train_data, test_data = test_train_split(data, test_size_ratio)
 
     if token_len:
-        train_dataset = TokenStockDataset(train_data, backcast_size, forecast_size, token_len, True, predict_col=dataset_col)
-        test_dataset = TokenStockDataset(test_data, backcast_size, forecast_size, token_len, False, predict_col=dataset_col)
+        train_dataset = TokenStockDataset(train_data, backcast_size, forecast_size, token_len, True, predict_col=dataset_col, use_velocity=use_velocity)
+        test_dataset = TokenStockDataset(test_data, backcast_size, forecast_size, token_len, False, predict_col=dataset_col, use_velocity=use_velocity)
     else:
-        train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col)
-        test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col)
+        train_dataset = StockDataset(train_data, backcast_size, forecast_size, True, predict_col=dataset_col, use_velocity=use_velocity)
+        test_dataset = StockDataset(test_data, backcast_size, forecast_size, False, predict_col=dataset_col, use_velocity=use_velocity)
 
     data_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=2*batch_size, shuffle=True)
