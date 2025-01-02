@@ -35,8 +35,14 @@ def multivariate_regression(data, target_col):
 # =========================
 def granger_causality(data, col1, col2, max_lag=5, **kwargs):
     # print("\nGranger Causality Test:")
+    col1_values = data[col1].values[1:]
+    col2_values = data[col2].values[:-1]
+    if col1 == col2:
+        col2 = col2 + '2'
+    df = pd.DataFrame({col1: col1_values, col2: col2_values})
+
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        results = grangercausalitytests(data[[col1, col2]], max_lag)
+        results = grangercausalitytests(df[[col1, col2]], max_lag)
     # Extract p-values and F-statistics
     p_values = [results[lag][0]['ssr_chi2test'][1] for lag in range(1, max_lag + 1)]
     f_stats = [results[lag][0]['ssr_chi2test'][0] for lag in range(1, max_lag + 1)]
@@ -80,7 +86,7 @@ def dynamic_time_warping(data, col1, col2, **kwargs):
     return distance
 
 
-def mat_results(data, compare_func, **kwargs):
+def sym_mat_results(data, compare_func, **kwargs):
     cols = data.columns
     results = pd.DataFrame()
     for i, col1 in enumerate(cols):
@@ -92,6 +98,17 @@ def mat_results(data, compare_func, **kwargs):
                 row.append(results[col2][i])
         results[col1] = row
     return results
+
+def mat_results(data, compare_func, **kwargs):
+    cols = data.columns
+    results = pd.DataFrame()
+    for i, col1 in enumerate(cols):
+        row = []
+        for j, col2 in enumerate(cols):
+            row.append(compare_func(data, col1, col2, **kwargs))
+        results[col1] = row
+    return results
+
 
 
 def test():
@@ -156,6 +173,8 @@ def main():
     df = df.tail(int(len(df) * prop))
     df = df[tickers]  # remove all columns that are not tickers
     df = df.rename(columns={col: col.split('_')[0] for col in df.columns})
+    for col in df.columns:
+        df[col] = df[col].pct_change().fillna(0)
 
     rsq_matrix = df.corr() ** 2
     plot_heat_map(rsq_matrix, 'R-Squared Matrix')
@@ -169,19 +188,19 @@ def main():
     print(multivar_reg)
     print('X' * 100, '\n')
 
-    granger_results = mat_results(df, granger_causality, max_lag=5)  # takes longest by far
+    granger_results = mat_results(df, granger_causality, max_lag=6)  # takes longest by far
     plot_heat_map(granger_results, 'Granger Causality Matrix')
     print('Granger Causality Results')
     print(granger_results)
     print('X' * 100, '\n')
 
-    coint_results = mat_results(df, cointegration_test)
+    coint_results = sym_mat_results(df, cointegration_test)
     plot_heat_map(coint_results, 'Cointegration Matrix')
     print('Cointegration Results')
     print(coint_results)
     print('X' * 100, '\n')
 
-    dtw_results = np.log(mat_results(df, dynamic_time_warping) + 1)  # Log transform for better visualization, add 1 to avoid log(0)
+    dtw_results = np.log(sym_mat_results(df, dynamic_time_warping) + 1)  # Log transform for better visualization, add 1 to avoid log(0)
     plot_heat_map(dtw_results, 'Natural-Log of Dynamic Time Warping Matrix')
     print('Dynamic Time Warping Results')
     print(dtw_results)
