@@ -86,12 +86,29 @@ def main():
     df = df.tail(int(len(df) * prop))
     df = df[tickers]  # remove all columns that are not tickers
     df = df.rename(columns={col: col.split('_')[0] for col in df.columns})
+
+    stds = []
     for col in df.columns:
         df[col] = df[col].pct_change().fillna(0)
+        stds.append(df[col].std())
+    print(stds)
+    print(f'Avg Std of Multiplicative Velocities: {sum(stds)/len(stds)}')
 
     p_results, f_results = mat_results(df, granger_causality)
     plot_heat_map(p_results, title='Granger Causality P-Value Heat Map')
     plot_heat_map(f_results, title='Granger Causality F-Statistic Heat Map')
+
+    # finding i, j of min p-value and max f-statistic
+    min_p = np.min(p_results.values)
+    max_f = np.max(f_results.values)
+    i, j = np.where(p_results.values == min_p)
+    k, l = np.where(f_results.values == max_f)
+
+    print(f"Minimum P-value: {min_p: .8f}: {p_results.columns[j[0]]} -> {p_results.columns[i[0]]}")
+    print(f"Maximum F-statistic: {max_f: .2f}: {f_results.columns[l[0]]} -> {f_results.columns[k[0]]}")
+
+    end = time.time()
+    print(f"Time Elapsed: {end - start: .2f} seconds")
 
 if __name__ == '__main__':
     main()
