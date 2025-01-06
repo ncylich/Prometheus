@@ -176,17 +176,17 @@ def main():
     for col in df.columns:
         df[col] = df[col].pct_change().fillna(0)
 
-    rsq_matrix = df.corr() ** 2
-    plot_heat_map(rsq_matrix, 'R-Squared Matrix')
-    print('R-Squared Mat')
-    print(rsq_matrix)
-    print('X' * 100, '\n')
-
-    multivar_reg = pd.DataFrame({col: [multivariate_regression(df, col)] for col in df.columns})
-    plot_2d_graph(multivar_reg, 'Multivariate R-Squared Values')
-    print('Multivariate R-Squared Values (each col with respect to ALL of the others)')
-    print(multivar_reg)
-    print('X' * 100, '\n')
+    # rsq_matrix = df.corr() ** 2
+    # plot_heat_map(rsq_matrix, 'R-Squared Matrix')
+    # print('R-Squared Mat')
+    # print(rsq_matrix)
+    # print('X' * 100, '\n')
+    #
+    # multivar_reg = pd.DataFrame({col: [multivariate_regression(df, col)] for col in df.columns})
+    # plot_2d_graph(multivar_reg, 'Multivariate R-Squared Values')
+    # print('Multivariate R-Squared Values (each col with respect to ALL of the others)')
+    # print(multivar_reg)
+    # print('X' * 100, '\n')
 
     granger_results = mat_results(df, granger_causality, max_lag=6)  # takes longest by far
     plot_heat_map(granger_results, 'Granger Causality Matrix')
@@ -194,17 +194,17 @@ def main():
     print(granger_results)
     print('X' * 100, '\n')
 
-    coint_results = sym_mat_results(df, cointegration_test)
-    plot_heat_map(coint_results, 'Cointegration Matrix')
-    print('Cointegration Results')
-    print(coint_results)
-    print('X' * 100, '\n')
-
-    dtw_results = np.log(sym_mat_results(df, dynamic_time_warping) + 1)  # Log transform for better visualization, add 1 to avoid log(0)
-    plot_heat_map(dtw_results, 'Natural-Log of Dynamic Time Warping Matrix')
-    print('Dynamic Time Warping Results')
-    print(dtw_results)
-    print('X' * 100, '\n')
+    # coint_results = sym_mat_results(df, cointegration_test)
+    # plot_heat_map(coint_results, 'Cointegration Matrix')
+    # print('Cointegration Results')
+    # print(coint_results)
+    # print('X' * 100, '\n')
+    #
+    # dtw_results = np.log(sym_mat_results(df, dynamic_time_warping) + 1)  # Log transform for better visualization, add 1 to avoid log(0)
+    # plot_heat_map(dtw_results, 'Natural-Log of Dynamic Time Warping Matrix')
+    # print('Dynamic Time Warping Results')
+    # print(dtw_results)
+    # print('X' * 100, '\n')
 
     print(f'Time elapsed: {time.time() - start:.2f} seconds')
 
