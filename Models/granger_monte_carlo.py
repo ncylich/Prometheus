@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
-from fontTools.qu2cu.benchmark import NUM_CURVES
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from granger_causality import granger_causality
+
+import sys
+if 'google.colab' in sys.modules:
+    from Prometheus.Models.granger_causality import granger_causality
+else:
+    from granger_causality import granger_causality
 
 
 
