@@ -37,11 +37,6 @@ def main():
     p_values = []
     f_stats = []
 
-    # for _ in tqdm(range(NUM_SAMPLES)):
-    #     p, f = random_test()
-    #     p_values.append(p)
-    #     f_stats.append(f)
-
     with ProcessPoolExecutor() as executor:
         results = list(tqdm(executor.map(random_test, range(NUM_SAMPLES)), total=NUM_SAMPLES))
 
