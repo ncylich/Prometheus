@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor
 
 import sys
 if 'google.colab' in sys.modules:
@@ -18,7 +19,7 @@ OBSERVED_P = 0.00004336
 OBSERVED_F = 25.32
 
 
-def random_test():
+def random_test(*args, **kwargs):
     stocks = {i: np.random.normal(0, std, LENGTH) for i in range(8)}
     stocks = pd.DataFrame(stocks)
 
@@ -35,8 +36,16 @@ def random_test():
 def main():
     p_values = []
     f_stats = []
-    for _ in tqdm(range(NUM_SAMPLES)):
-        p, f = random_test()
+
+    # for _ in tqdm(range(NUM_SAMPLES)):
+    #     p, f = random_test()
+    #     p_values.append(p)
+    #     f_stats.append(f)
+
+    with ProcessPoolExecutor() as executor:
+        results = list(tqdm(executor.map(random_test, range(NUM_SAMPLES)), total=NUM_SAMPLES))
+
+    for p, f in results:
         p_values.append(p)
         f_stats.append(f)
 
