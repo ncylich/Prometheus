@@ -33,12 +33,11 @@ class StockDataset(Dataset):
         self.year = torch.tensor(data['date'].dt.year.values)[1:]
 
         self.tickers = tickers
-        self.prices = {ticker: torch.from_numpy(data[f'{ticker}_{predict_col}'].to_numpy()[1:]) for ticker in tickers}
 
         self.prices = {}
         for ticker in tickers:
             prices = data[f'{ticker}_{predict_col}'].to_numpy()
-            prices = prices.pct_change()[1:] if use_velocity else prices[1:]
+            prices = prices.pct_change()[1:] if use_velocity else prices
             assert not np.isnan(prices).any()
 
             if training_set:

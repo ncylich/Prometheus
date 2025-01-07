@@ -1,6 +1,8 @@
 import sys
 import time
+import math
 import torch
+import numpy as np
 from torch import nn
 
 
@@ -15,11 +17,18 @@ def price_mse_loss(recon_x, x):
     recon_x = recon_x[:, 0]
     return nn.MSELoss()(recon_x, x)
 
+def sigmoid_warmup(epoch, max_beta=1.0, midpoint=20, steepness=1.0):
+    return max_beta / (1 + np.exp(-steepness * (epoch - midpoint)))
+
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
     model = model.to(device)
 
+    fifth = epochs // 5
+    mp = (epochs - fifth) // 2
     for epoch in range(epochs):
+        kld_weight = 0 if epoch < fifth else sigmoid_warmup(epoch - fifth, max_beta=1.0, midpoint=mp, steepness=0.5)
+
         model.train()
         train_loss = 0.0
         train_mse_loss = 0.0
@@ -28,7 +37,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
 
         for i, (x, y, time) in enumerate(train_loader):
             recon_x, x, mu, logvar = process_batch(model, x, device)
-            loss, mse, kld = criterion(recon_x, x, mu, logvar)
+            loss, mse, kld = criterion(recon_x, x, mu, logvar, kld_weight=kld_weight)
             price_mse = price_mse_loss(recon_x, x)
 
             optimizer.zero_grad()
@@ -58,7 +67,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
         with torch.no_grad():
             for x, y, time in test_loader:
                 recon_x, x, mu, logvar = process_batch(model, x, device)
-                loss, mse, kld = criterion(recon_x, x, mu, logvar)
+                loss, mse, kld = criterion(recon_x, x, mu, logvar, kld_weight=kld_weight)
                 price_mse = price_mse_loss(recon_x, x)
 
                 val_loss += loss.item()
