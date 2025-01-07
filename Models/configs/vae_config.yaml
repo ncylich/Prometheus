@@ -1,6 +1,6 @@
 seq_len: 16
-in_channels: 2
-latent_dim: 32
+in_channels: 1
+latent_dim: 64
 use_dct: False
 num_tickers: 8
 embed_dim: 128
@@ -9,5 +9,8 @@ ff_dim: 256
 batch_size: 2048
 lr: 1e-3
 epochs: 100
-init_weight_magnitude: 1e-2
-kld_weight: 0
+init_weight_magnitude: 1e-3
+
+kld_skip: 0
+kld_beta: .01
+kld_mp_divisor: 4

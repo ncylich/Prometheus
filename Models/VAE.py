@@ -35,7 +35,7 @@ class Config:
     lr: float = 1e-3
     epochs: int = 100
     init_weight_magnitude: float = 1e-3
-    kld_weight: float = 0.1
+    kld_skip: int = 0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -277,13 +277,13 @@ def main(config_path: str = ''):
     patience = max(1, math.floor(math.log(config.epochs, math.e)))
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=patience)
 
-    def criterion(recon_x, x, mu, logvar, kld_weight=config.kld_weight):
+    def criterion(recon_x, x, mu, logvar, kld_weight):
         mse = F.mse_loss(recon_x, x)
         # Standard VAE KL
         kld = -torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return mse + kld_weight * kld, mse, kld
 
-    train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, config.epochs, device)
+    train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, config.epochs, config, device)
 
 if __name__ == '__main__':
     main('configs/vae_config.yaml')

@@ -14,7 +14,7 @@ class StockDataset(Dataset):
     ticker_volume_scale_params = {}
 
 
-    def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False, use_velocity=False):
+    def __init__(self, data, backcast_size, forecast_size, training_set, predict_col='close', tickers=None, log_vols=False, use_velocity=True):
         if tickers is None:
             tickers = []
             for ticker in [col.split('_')[0] for col in list(data.columns) if '_' in col]:

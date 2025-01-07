@@ -8,8 +8,9 @@ from tqdm import tqdm
 
 
 def process_batch(model, x, device):
-    # x = x[:, 0, :, :].to(device)  # (B, sequence_len, num_tickers)
-    x = x.permute(0, 1, 3, 2)  # (B, num_tickers, sequence_len)
+    if model.in_channels == 1:
+        x = x[:, 0, :, :].to(device).unsqueeze(1)  # (B, 1, sequence_len, num_tickers)
+    x = x.permute(0, 1, 3, 2)  # (B, C, num_tickers, sequence_len)
     recon_x, mu, logvar = model(x)
     return recon_x, x, mu, logvar
 
@@ -18,17 +19,16 @@ def price_mse_loss(recon_x, x):
     recon_x = recon_x[:, 0]
     return nn.MSELoss()(recon_x, x)
 
-def sigmoid_warmup(epoch, max_beta=1.0, midpoint=20, steepness=1.0):
+def sigmoid_warmup(epoch, max_beta=0.1, midpoint=20, steepness=0.1):
     return max_beta / (1 + np.exp(-steepness * (epoch - midpoint))) if epoch >= 0 else 0.0
 
 
-def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
+def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, config, device='cuda'):
     model = model.to(device)
 
-    zero_kld = 10  # epochs // 5
-    mp = (epochs - zero_kld) // 2
+    mp = (epochs - config.kld_skip) // config.kld_mp_divisor
     for epoch in tqdm(range(epochs)):
-        kld_weight = sigmoid_warmup(epoch - zero_kld, max_beta=1.0, midpoint=mp, steepness=0.5)
+        kld_weight = sigmoid_warmup(epoch - config.kld_skip, max_beta=config.kld_beta, midpoint=mp, steepness=0.5)
 
         model.train()
         train_loss = 0.0
