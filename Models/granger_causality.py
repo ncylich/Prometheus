@@ -75,7 +75,7 @@ def plot_heat_map(matrix, title='Heat Map'):
 def main():
     interval = 30
     prop = .1
-    max_lag = 5
+    max_lag = 10
 
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)

@@ -15,10 +15,10 @@ else:
 
 
 def main():
-    col1, col2 = 'GC', 'VX'
+    col1, col2 = 'ZN', 'VX'
     interval = 30
     prop = .1
-    max_lag = 5
+    max_lag = 10
 
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
@@ -57,11 +57,22 @@ def main():
     actual_predictions = actuals[:-1] * (1 + predictions)
 
     residuals = actual_predictions - actuals[1:]
-    naive_residuals = actuals[1:] - actuals[:-1]
+    naive_residuals = actuals[:-1] - actuals[1:]
 
     # Calculate MSE and MAE
-    print(f'Naive: MSE={np.mean(naive_residuals ** 2):.4f}, MAE={np.mean(np.abs(naive_residuals)):.4f}')
-    print(f'Granger: MSE={np.mean(residuals ** 2):.4f}, MAE={np.mean(np.abs(residuals)):.4f}')
+    print(f'Naive: MSE={np.mean(naive_residuals ** 2):.6f}, MAE={np.mean(np.abs(naive_residuals)):.6f}')
+    print(f'Granger: MSE={np.mean(residuals ** 2):.6f}, MAE={np.mean(np.abs(residuals)):.6f}')
+    print('Naive-Granger Mean Absolute Difference:', np.mean(np.abs(naive_residuals - residuals)))
+
+    # correct directions
+    actual_directions = np.sign(test_vel_df[col1].iloc[best_lag:].values)
+    predicted_directions = np.sign(predictions)
+    correct_directions = np.sum(actual_directions == predicted_directions)
+    print(f'Correct Directions: {correct_directions}/{len(actual_directions)}={correct_directions/len(actual_directions):.2f}')
+
+    inverse_strategy_residuals = naive_residuals * predicted_directions * -1
+    print(f'Avg Inverse Strategy Residuals: {np.mean(inverse_strategy_residuals):.6f}')
+    print(f'Avg Inverse Stratgey Return: {np.mean(inverse_strategy_residuals / actuals[:-1]):.6f}')
 
 if __name__ == "__main__":
     main()
