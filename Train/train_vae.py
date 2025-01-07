@@ -4,6 +4,7 @@ import math
 import torch
 import numpy as np
 from torch import nn
+from tqdm import tqdm
 
 
 def process_batch(model, x, device):
@@ -18,16 +19,16 @@ def price_mse_loss(recon_x, x):
     return nn.MSELoss()(recon_x, x)
 
 def sigmoid_warmup(epoch, max_beta=1.0, midpoint=20, steepness=1.0):
-    return max_beta / (1 + np.exp(-steepness * (epoch - midpoint)))
+    return max_beta / (1 + np.exp(-steepness * (epoch - midpoint))) if epoch >= 0 else 0.0
 
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, device='cuda'):
     model = model.to(device)
 
-    fifth = epochs // 5
-    mp = (epochs - fifth) // 2
-    for epoch in range(epochs):
-        kld_weight = 0 if epoch < fifth else sigmoid_warmup(epoch - fifth, max_beta=1.0, midpoint=mp, steepness=0.5)
+    zero_kld = 10  # epochs // 5
+    mp = (epochs - zero_kld) // 2
+    for epoch in tqdm(range(epochs)):
+        kld_weight = sigmoid_warmup(epoch - zero_kld, max_beta=1.0, midpoint=mp, steepness=0.5)
 
         model.train()
         train_loss = 0.0
