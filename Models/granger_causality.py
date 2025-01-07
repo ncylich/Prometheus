@@ -19,7 +19,8 @@ def granger_causality(data, col1, col2, max_lag=5, **kwargs):
     df = pd.DataFrame({col1: col1_values, col2: col2_values})
 
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        results = grangercausalitytests(df[[col1, col2]], max_lag)
+        col_df = df[[col1, col2]]
+        results = grangercausalitytests(col_df, max_lag)
 
     # Extract p-values and F-statistics
     p_values = [results[lag][0]['ssr_chi2test'][1] for lag in range(1, max_lag + 1)]
@@ -28,29 +29,29 @@ def granger_causality(data, col1, col2, max_lag=5, **kwargs):
     # Get the minimum p-value and corresponding lag
     min_p_value = min(p_values)
     best_lag = p_values.index(min_p_value) + 1  # Lags are 1-indexed
+    best_f_stat = f_stats[best_lag - 1]
+    best_model = results[best_lag][1][1]
 
-    # print(f"Minimum P-value: {min_p_value}")
-    # print(f"Best Lag: {best_lag}")
-    # print(f"Corresponding F-statistic: {f_stats[best_lag - 1]}")
-    #
-    # return min_p_value, best_lag, f_stats[best_lag - 1]
-
-    return min_p_value, f_stats[best_lag - 1]
+    return min_p_value, best_f_stat, best_model, best_lag
 
 def mat_results(data, compare_func, **kwargs):
     cols = data.columns
     results1 = pd.DataFrame()
     results2 = pd.DataFrame()
+    results3 = pd.DataFrame()
     for i, col1 in enumerate(cols):
         row1 = []
         row2 = []
+        row3 = []
         for j, col2 in enumerate(cols):
-            p, f = compare_func(data, col1, col2, **kwargs)
+            p, f, model, _ = compare_func(data, col1, col2, **kwargs)
             row1.append(p)
             row2.append(f)
+            row3.append(model)
         results1[col1] = row1
         results2[col1] = row2
-    return results1, results2
+        results3[col1] = row3
+    return results1, results2, results3
 
 def plot_heat_map(matrix, title='Heat Map'):
     plt.figure(figsize=(10, 8))
@@ -74,6 +75,7 @@ def plot_heat_map(matrix, title='Heat Map'):
 def main():
     interval = 30
     prop = .1
+    max_lag = 5
 
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
@@ -94,7 +96,7 @@ def main():
     print(stds)
     print(f'Avg Std of Multiplicative Velocities: {sum(stds)/len(stds)}')
 
-    p_results, f_results = mat_results(df, granger_causality)
+    p_results, f_results, models = mat_results(df, granger_causality, max_lag=max_lag)
     plot_heat_map(p_results, title='Granger Causality P-Value Heat Map')
     plot_heat_map(f_results, title='Granger Causality F-Statistic Heat Map')
 

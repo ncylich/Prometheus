@@ -27,7 +27,7 @@ def random_test(*args, **kwargs):
     for i in range(8):
         for j in range(8):
             if i != j:
-                p, f = granger_causality(stocks, i, j)
+                p, f, _, __ = granger_causality(stocks, i, j)
                 min_p = min(min_p, p)
                 max_f = max(max_f, f)
     return min_p, max_f
