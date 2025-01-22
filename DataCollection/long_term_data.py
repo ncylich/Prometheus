@@ -20,10 +20,15 @@ COLS = {
 fill_times = True
 unadjusted = True
 
-unadjusted_postfix = '_full_1min_continuous_UNadjusted'
-adjusted_postfix = '_full_1min_continuous_ratio_adjusted'
-data_dir = 'long_term_data'
+n_min = 30
+unadjusted_postfix = f'_full_{n_min}min_continuous_UNadjusted'
+adjusted_postfix = f'_full_{n_min}min_continuous_ratio_adjusted'
+
+# data_dir = 'long_term_data'
+# result_dir = '../Local_Data'
+data_dir = '../Local_Data/futures_full_30min_contin_UNadj_11assu1'
 result_dir = '../Local_Data'
+
 
 def get_files(path=data_dir):
     """
@@ -221,8 +226,8 @@ def load_df(file):
         cols = {col: f"{col.strip()}" for col in df.columns}
         df = df.rename(columns=cols)
 
-    df['date'] = pd.to_datetime(df['date'], utc=True)
-    df['date'] = df['date'].dt.tz_convert('America/New_York')
+    # df['date'] = pd.to_datetime(df['date'], utc=True)
+    # df['date'] = df['date'].dt.tz_convert('America/New_York')
 
     return df
 
@@ -256,19 +261,20 @@ def merge_data(data_files, adjusted=False):
     merged_df = load_and_format_df(data_files[0])
     for file in tqdm(data_files[1:]):
         stock_df = load_and_format_df(file)
-        merged_df = merged_df.merge(stock_df, on=['date'], how='inner')
+        print(f'\n{file.split("_")[0]}: {len(stock_df): ,} rows')
+        # merged_df = merged_df.merge(stock_df, on=['date'], how='inner')
         del stock_df
         gc.collect()
 
     return merged_df
 
-def main():
+def run():
     files = get_files()
 
     if unadjusted:
         df = merge_data(files)
         print('UNadjusted number of row:', len(df))
-        path = os.path.join(result_dir, f'1min_long_term_merged_UNadjusted.parquet')
+        path = os.path.join(result_dir, f'All_30min_long_term_merged_UNadjusted.parquet')
         df.to_parquet(path, compression='snappy', index=False)
     else:
         df = merge_data(files, adjusted=True)
@@ -282,8 +288,11 @@ def clean_old_filled_files():
         if f.endswith('_filled.csv'):
             os.remove(os.path.join(data_dir, f))
 
-if __name__ == '__main__':
+def main(path: str = '', res_dir: str = '') -> None:
     start = pd.Timestamp.now()
-    clean_old_filled_files()
-    main()
+    # clean_old_filled_files()
+    run()
     print('Done:', pd.Timestamp.now() - start)
+
+if __name__ == '__main__':
+    main()

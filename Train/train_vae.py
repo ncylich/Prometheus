@@ -81,7 +81,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, schedule
             val_kld_loss /= len(test_loader)
             val_price_mse_loss /= len(test_loader)
 
-        if scheduler is not None:
+        if scheduler is not None and False:
             scheduler.step(val_loss)
 
         # print(f"Epoch [{epoch + 1}/{epochs}] - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f} - MSE Loss: {train_mse_loss:.4f} - KLD Loss: {train_kld_loss:.4f}")

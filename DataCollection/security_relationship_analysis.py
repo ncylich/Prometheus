@@ -168,7 +168,8 @@ def main():
 
     start = time.time()
 
-    df = pd.read_parquet(f'../Local_Data/{interval}min_long_term_merged_UNadjusted.parquet')
+    # df = pd.read_parquet(f'../Local_Data/{interval}min_long_term_merged_UNadjusted.parquet')
+    df = pd.read_parquet(f'../Local_Data/focused_futures_30min/all_long_term_combo.parquet')
     tickers = [col for col in df.columns if col.endswith('_close')]
     df = df.tail(int(len(df) * prop))
     df = df[tickers]  # remove all columns that are not tickers
@@ -209,5 +210,4 @@ def main():
     print(f'Time elapsed: {time.time() - start:.2f} seconds')
 
 if __name__ == "__main__":
-    # test()
     main()

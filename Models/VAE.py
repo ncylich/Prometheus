@@ -35,7 +35,10 @@ class Config:
     lr: float = 1e-3
     epochs: int = 100
     init_weight_magnitude: float = 1e-3
+
     kld_skip: int = 0
+    kld_beta: float = 0.1
+    klm_mp_divisor: int = 4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

@@ -11,6 +11,6 @@ lr: 1e-3
 epochs: 100
 init_weight_magnitude: 1e-3
 
-kld_skip: 0
-kld_beta: .01
+kld_skip: 10
+kld_beta: 1e-4
 kld_mp_divisor: 4
