@@ -7,6 +7,28 @@ import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+
+'''
+Redundant Tickers:
+	ES (E-Mini S&P 500 Futures) - MES (Micro E-mini S&P 500 Futures)
+    NQ (E-mini Nasdaq-100 Futures) - MNQ (Micro E-mini Nasdaq-100 Futures)
+    RTY (e-Mini Russell 2000) - M2K (Micro E-mini Russell 2000 Index Futures)
+    GC (Gold Futures) - MGC (Micro Gold Futures)
+    SI (Silver Futures) - SIL (Micro Silver Futures)
+    CL (Crude Oil WTI Futures) - MCL (Micro WTI Crude Oil Futures)
+    NG (Henry Hub Natural Gas Futures) - QG (Natural Gas Mini Futures)
+    YM (Dow Futures Mini) - YM (Dow Futures Mini) (Listed twice as Mini)
+    E6 (Euro FX Futures) - E7 (E-mini Euro FX)
+    J1 (Japanese Yen Futures) - J7 (E-mini Japanese Yen)
+    US (30 Year US Treasury Bond Future) - UB (Ultra US Treasury Bond Futures) (Not exactly a mini but related)
+    ZN (10-Year Treasury Note Futures) - TN (Ultra 10-Year US Treasury Note Futures) (Not exactly a mini but related)
+    ZF (5-Year Treasury Note Futures) - ZT (2-Year Treasury Note Futures) (Not exactly a mini but related)
+	
+VERY Related Tickers:
+    1. NKD (Nikkei 225 denominated in USD) vs. NIY (Nikkei 225 denominated in JPY)
+'''
+
+
 data_path = '../Local_Data/futures_full_30min_contin_UNadj_11assu1'
 dest_path = '../Local_Data/focused_futures_30min'
 
