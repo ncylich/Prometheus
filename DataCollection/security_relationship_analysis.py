@@ -14,7 +14,28 @@ import io
 # =========================
 # 1. Multivariate Linear Regression
 # =========================
-def multivariate_regression(data, target_col):
+def multivariate_regression(data, target_col, degree=1):
+    other_cols = [col for col in data.columns if col != target_col]
+
+    start_X = data[other_cols].values
+    X = start_X  # Independent variable
+    y = data[target_col].values  # Dependent variable
+
+    for i in range(2, degree + 1):
+        X = np.concatenate((X, start_X ** i), axis=1)
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    # print("Multivariate Linear Regression Results:")
+    # print(f"Coefficient: {model.coef_[0]}")
+    # print(f"Intercept: {model.intercept_}")
+    # print(f"R^2 Score: {model.score(X, y)}")
+
+    return model.score(X, y)
+
+
+def single_variate_regression_of_all_variates(data, target_col):
     other_cols = [col for col in data.columns if col != target_col]
 
     X = data[target_col].values.reshape(-1, 1)  # Independent variable
@@ -29,6 +50,7 @@ def multivariate_regression(data, target_col):
     # print(f"R^2 Score: {model.score(X, y)}")
 
     return model.score(X, y)
+
 
 # =========================
 # 2. Granger Causality Test
