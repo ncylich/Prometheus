@@ -20,6 +20,23 @@ def process_file(ticker, file):
     return df
 
 
+def fill_missing_dates(df):
+    # Get the range of dates
+    min_date = df['date'].min()
+    max_date = df['date'].max()
+
+    # Create the full datetime index with 30-minute intervals
+    idx = pd.date_range(min_date, max_date, freq='30min', tz='America/New_York')
+
+    # Reindex the DataFrame to align with the complete datetime index
+    df = df.set_index('date').reindex(idx).reset_index()
+
+    # Rename 'index' back to 'date'
+    df = df.rename(columns={'index': 'date'})
+
+    return df
+
+
 def naive_main():
     csvs = get_csvs()
 
@@ -27,7 +44,7 @@ def naive_main():
     cl_idx, cl_file = [(i, file) for i, file in enumerate(csvs) if file.startswith("CL_")][0]
     csvs = csvs[:cl_idx] + csvs[cl_idx + 1:]
 
-    merged_df = process_file(cl_file.split('_')[0], cl_file)
+    merged_df = process_file("CL", cl_file)
     for file in tqdm(csvs):
         ticker = file.split('_')[0]
         df = process_file(ticker, file)
@@ -41,14 +58,17 @@ def main():
     csvs = get_csvs()
 
     # Reorder so that CL is first
-    cl_idx, cl_file = [(i, file) for i, file in enumerate(csvs) if file.startswith("CL_")][0]
-    csvs = csvs[:cl_idx] + csvs[cl_idx + 1:]
+    cl_idx = [i for i, file in enumerate(csvs) if file.startswith("CL_")][0]
+    csvs = [csvs[cl_idx]] + csvs[:cl_idx] + csvs[cl_idx + 1:]
 
-    merged_df = process_file(cl_file.split('_')[0], cl_file)
+    merged_df = None
     for file in tqdm(csvs):
         ticker = file.split('_')[0]
         df = process_file(ticker, file)[['date', f'{ticker}_close', f'{ticker}_volume']]  # only keep close and volume
-        merged_df = pd.merge(merged_df, df, on='date', how='left')
+        if merged_df is None:
+            merged_df = fill_missing_dates(df)
+        else:
+            merged_df = pd.merge(merged_df, df, on='date', how='left')
 
         merged_df[f'{ticker}_close'] = merged_df[f'{ticker}_close'].ffill()  # filling opens with previous close
         merged_df[f'{ticker}_volume'] = merged_df[f'{ticker}_volume'].fillna(0)  # filling in missing volumes with 0
