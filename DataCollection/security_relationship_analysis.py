@@ -14,6 +14,101 @@ import io
 # =========================
 # 1. Multivariate Linear Regression
 # =========================
+
+def linear_regression(X, y, fit_intercept=True):
+    """
+    Computes the ordinary least squares solution for linear regression:
+        beta = (X^T X)^(-1) X^T y
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input feature matrix of shape (n_samples, n_features).
+    y : np.ndarray
+        Target values of shape (n_samples,).
+    fit_intercept : bool, optional
+        If True, a column of ones is added to X to fit an intercept.
+        Default is True.
+
+    Returns
+    -------
+    beta : np.ndarray
+        The fitted regression coefficients. If fit_intercept=True,
+        then beta[0] is the intercept, and beta[1:] are the feature
+        coefficients.
+    """
+    # Convert X, y to numpy arrays (in case they aren't already)
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    # Optionally add a column of ones to X for the intercept
+    if fit_intercept:
+        ones = np.ones((X.shape[0], 1), dtype=float)
+        X = np.hstack([ones, X])
+
+    # Normal equation: (X^T X)^(-1) X^T y
+    # Use np.linalg.inv or np.linalg.pinv to avoid potential singularity issues
+    # For a more numerically stable solution, you could use np.linalg.pinv (the pseudo-inverse)
+    # but here we demonstrate the standard normal equation approach:
+    XtX = X.T.dot(X)
+    XtX_inv = np.linalg.inv(XtX)
+    XtY = X.T.dot(y)
+    beta = XtX_inv.dot(XtY)
+
+    return beta
+
+
+def r_squared(X, y, beta, fit_intercept=True):
+    """
+    Computes the R^2 (coefficient of determination) for a linear regression.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix of shape (n_samples, n_features).
+    y : np.ndarray
+        Target values of shape (n_samples,).
+    beta : np.ndarray
+        Fitted coefficients from linear_regression (including intercept if fit_intercept=True).
+    fit_intercept : bool, optional
+        Indicates whether 'beta' includes an intercept term in the first coefficient.
+        If True, the first element of 'beta' is interpreted as the intercept,
+        and 'X' does NOT already have a column of ones appended.
+        If False, 'X' must already include any intercept column, if desired.
+        Default is True.
+
+    Returns
+    -------
+    float
+        The R^2 (coefficient of determination).
+    """
+    # Ensure numpy arrays
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    # If beta includes an intercept, add a column of ones to X
+    if fit_intercept:
+        X = np.hstack([np.ones((X.shape[0], 1)), X])
+
+    # Compute predictions
+    y_pred = X.dot(beta)
+
+    # Compute residual sum of squares
+    ss_res = np.sum((y - y_pred) ** 2)
+
+    # Compute total sum of squares (proportional to the variance of y)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+
+    # Edge case: if y is constant, ss_tot can be 0.
+    if ss_tot == 0:
+        # If y is constant, R^2 is either perfect (if predictions match) or undefined.
+        # By convention, one could return 1.0 if y_pred == y, else 0.0
+        return 1.0 if np.allclose(y, y_pred) else 0.0
+
+    # Compute R^2
+    r2 = 1 - (ss_res / ss_tot)
+    return r2
+
 def multivariate_regression(data, target_col, degree=1):
     other_cols = [col for col in data.columns if col != target_col]
 
@@ -24,18 +119,20 @@ def multivariate_regression(data, target_col, degree=1):
     for i in range(2, degree + 1):
         X = np.concatenate((X, start_X ** i), axis=1)
 
-    model = LinearRegression()
-    model.fit(X, y)
+    # model = LinearRegression()
+    # model.fit(X, y)
+    model = linear_regression(X, y)
+    score = r_squared(X, y, model)
 
     # print("Multivariate Linear Regression Results:")
     # print(f"Coefficient: {model.coef_[0]}")
     # print(f"Intercept: {model.intercept_}")
     # print(f"R^2 Score: {model.score(X, y)}")
 
-    return model.score(X, y)
+    return score, model
 
 
-def single_variate_regression_of_all_variates(data, target_col):
+def single_variate_regression_to_all_variates(data, target_col):
     other_cols = [col for col in data.columns if col != target_col]
 
     X = data[target_col].values.reshape(-1, 1)  # Independent variable
