@@ -219,7 +219,7 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
-    df = pd.read_parquet(f'../Local_Data/unique_focused_futures_30min/interpolated_all_long_term_combo.parquet')
+    df = pd.read_parquet(f'../Local_Data/interpolated_all_long_term_combo.parquet')
     df['date'] = pd.to_datetime(df['date'], utc=True)
     df['date'] = df['date'].dt.tz_convert('America/New_York')
 
@@ -230,6 +230,11 @@ def main():
     df = calculate_macd_for_tickers(df, fast_period=12, slow_period=26, signal_period=9)
 
     df = df.dropna()
+
+    cl_cols = df.columns[df.columns.str.startswith('CL')].tolist()
+    # print(cl_cols)
+    df = df[cl_cols]
+    df.to_csv("../Local_Data/technical_indicators.csv", index=True)
 
 
 if __name__ == '__main__':
