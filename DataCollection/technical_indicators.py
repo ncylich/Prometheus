@@ -1,4 +1,7 @@
+import numpy as np
 import pandas as pd
+from security_relationship_analysis import multivariate_regression, plot_2d_graph, r_squared
+from multivar_r2_reduction import test_multivariate_regression
 
 def aggregate_to_daily(df):
     df = df.copy()
@@ -218,6 +221,45 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df[ordered_cols]
 
 
+def linear_predict(data, target_col, beta, degree=1):
+    target_col_suffix = '_'.join(target_col.split('_')[1:])
+    other_cols = [col for col in data.columns if col != target_col and col.endswith(target_col_suffix)]
+
+    start_X = data[other_cols].values
+    X = start_X  # Independent variable
+
+    for i in range(2, degree + 1):
+        X = np.concatenate((X, start_X ** i), axis=1)
+
+    X = np.hstack([np.ones((X.shape[0], 1)), X])
+
+    pred = X.dot(beta)
+    return pred
+
+
+def linear_ticker_regression(df, ticker, train_prop=0.8, degree=1):
+    org_df = df.copy()
+    cols = [col for col in df.columns if col.endswith('_close')]
+    for col in cols:
+        df[col] = df[col].pct_change()
+    df = df[cols].dropna()
+
+    test_df = df.tail(int(len(df) * train_prop))
+    train_df = df.head(len(df) - int(len(df) * train_prop))
+
+    col = ticker + "_close"
+
+    score, model = multivariate_regression(train_df, col, degree=degree)
+    print(f"{col} train: {score}")
+
+    test_score = test_multivariate_regression(model, test_df, col, degree=degree)
+    print(f"{col} test: {test_score}")
+
+    pred = linear_predict(df, col, model, degree=degree)
+    org_df[f'{col}_pred'] = pred
+    return org_df
+
+
 def main():
     df = pd.read_parquet(f'../Local_Data/interpolated_all_long_term_combo.parquet')
     df['date'] = pd.to_datetime(df['date'], utc=True)
@@ -231,10 +273,14 @@ def main():
 
     df = df.dropna()
 
-    cl_cols = df.columns[df.columns.str.startswith('CL')].tolist()
-    # print(cl_cols)
-    df = df[cl_cols]
-    df.to_csv("../Local_Data/technical_indicators.csv", index=True)
+    # cl_cols = df.columns[df.columns.str.startswith('CL')].tolist()
+    # # print(cl_cols)
+    # df = df[cl_cols]
+    # df.to_csv("../Local_Data/technical_indicators.csv", index=True)
+
+    df = linear_ticker_regression(df, 'CL')
+
+    return df
 
 
 if __name__ == '__main__':

@@ -22,7 +22,7 @@ def test_multivariate_regression(model, test_df, target_col, degree):
 
 def main():
     prop = .2
-    degree = 1  # Surprisingly, the R^2 values are highest when degree 1
+    degree = 3  # Surprisingly, the R^2 values are highest when degree 1
 
     df = pd.read_parquet(f'../Local_Data/unique_focused_futures_30min/interpolated_all_long_term_combo.parquet')
     # df = pd.read_parquet(f'../Local_Data/30min_long_term_merged_UNadjusted.parquet')
@@ -41,19 +41,29 @@ def main():
 
     # Split the DataFrame into training and testing
     test_df = df.tail(int(len(df) * prop))
-    train_df = df.head(int(len(df) * prop))
+    train_df = df.head(len(df) - int(len(df) * prop))
+
+    # Normalization attempts (didn't work)
+    # train_df = pd.concat([train_df] * 10, ignore_index=True)
+    #
+    # # Add noise to train_df to normalize results
+    # std_devs = train_df.std()
+    # noise_scale = 1e-2
+    # for col in train_df.columns:
+    #     noise = np.random.normal(loc=0, scale=std_devs[col] * noise_scale, size=len(train_df))
+    #     train_df.loc[:, col] = train_df[col] + noise
 
     multivar_reg_train = {col: multivariate_regression(train_df, col, degree=degree) for col in train_df.columns}
     multivar_reg = pd.DataFrame({col: [score] for col, (score, _) in multivar_reg_train.items()})[tickers]
 
-    plot_2d_graph(multivar_reg, 'Starting Multivariate R-Squared Values')
+    plot_2d_graph(multivar_reg, f'Starting Multivariate R-Squared Values, degree={degree}')
     print('Multivariate R-Squared Values (each col with respect to ALL of the others)')
     print(multivar_reg)
     print('X' * 100, '\n')
 
     mutlivar_test_reg = pd.DataFrame({col: [test_multivariate_regression(multivar_reg_train[col][1], test_df, col, degree)]
                                       for col in train_df.columns})[tickers]
-    plot_2d_graph(mutlivar_test_reg, 'Starting Test Multivariate R-Squared Values')
+    plot_2d_graph(mutlivar_test_reg, f'Starting Test Multivariate R-Squared Values, degree={degree}')
 
     start_len = len(train_df.columns)
     cols = set(train_df.columns)
@@ -67,14 +77,14 @@ def main():
     remaining_tickers = [ticker for ticker in tickers if ticker in cols]
     multivar_reg_train = {col: multivariate_regression(train_df, col, degree=degree) for col in cols}
     multivar_reg = pd.DataFrame({col: [score] for col, (score, _) in multivar_reg_train.items()})[remaining_tickers]
-    plot_2d_graph(multivar_reg, 'Final Multivariate R-Squared Values')
+    plot_2d_graph(multivar_reg, f'Final Multivariate R-Squared Values, degree={degree}')
     print('Multivariate R-Squared Values (each col with respect to ALL of the others)')
     print(multivar_reg)
     print('X' * 100, '\n')
 
     mutlivar_test_reg = pd.DataFrame({col: [test_multivariate_regression(multivar_reg_train[col][1], test_df, col, degree)]
                                       for col in cols})[remaining_tickers]
-    plot_2d_graph(mutlivar_test_reg, 'Final Test Multivariate R-Squared Values')
+    plot_2d_graph(mutlivar_test_reg, f'Final Test Multivariate R-Squared Values, degree={degree}')
 
 
 if __name__ == "__main__":
