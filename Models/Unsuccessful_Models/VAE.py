@@ -7,7 +7,7 @@ if 'google.colab' in sys.modules:
 else:
     from Train.train_vae import train_model
     from Train.dataloaders import get_long_term_Xmin_data_loaders
-    from Models.load_config import dynamic_load_config, update_config_with_factor
+    from Models.Unsuccessful_Models.load_config import dynamic_load_config, update_config_with_factor
 
 import torch
 import torch.nn as nn
@@ -15,7 +15,6 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
-from torch.nn import MSELoss
 import torch.nn.init as init
 import math
 from dataclasses import dataclass
@@ -289,4 +288,4 @@ def main(config_path: str = ''):
     train_model(model, train_loader, test_loader, criterion, optimizer, scheduler, config.epochs, config, device)
 
 if __name__ == '__main__':
-    main('configs/vae_config.yaml')
+    main('../configs/vae_config.yaml')

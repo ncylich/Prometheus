@@ -3,18 +3,12 @@ if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config, update_config_with_factor
 else:
-    from Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
-    from Models.load_config import dynamic_load_config, update_config_with_factor
+    from Train.train_somoformer import train_model, get_long_term_data_loaders
+    from Models.Unsuccessful_Models.load_config import dynamic_load_config, update_config_with_factor
 
-from torchvision.ops.misc import interpolate
-from enum import Enum
-import torch
-from torch import nn
-from torch.nn import L1Loss, MSELoss, init
+from torch.nn import init
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
 import torch
 from torch import nn
 import numpy as np
@@ -295,4 +289,4 @@ def main(config_path: str = ''):
 
 
 if __name__ == '__main__':
-    main('configs/dct_config.yaml')
+    main('../configs/dct_config.yaml')

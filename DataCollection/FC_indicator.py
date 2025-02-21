@@ -43,6 +43,7 @@ class LinearPredictor(nn.Module):
         for i in range(num_layers - 1):
             in_features = input_dim if i == 0 else hidden_dim
             layers.append(nn.Linear(in_features, hidden_dim))
+            layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
             # Add dropout for regularization.
             if dropout_prob > 0:
@@ -55,7 +56,7 @@ class LinearPredictor(nn.Module):
         return self.model(x)
 
 
-def train(model, dataloader, criterion, optimizer, num_epochs=100):
+def train(model, dataloader, test_dataloader, criterion, optimizer, num_epochs=100):
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
@@ -69,6 +70,17 @@ def train(model, dataloader, criterion, optimizer, num_epochs=100):
 
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss / len(dataloader):.4f}")
+
+        # evaluate the model on the test set
+        model.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for batch_X, batch_y in test_dataloader:
+                outputs = model(batch_X)
+                loss = criterion(outputs, batch_y)
+                test_loss += loss.item()
+        test_loss /= len(test_dataloader)
+        print(f"Epoch {epoch + 1}/{num_epochs}, Test Loss: {test_loss:.4f}")
 
 def main():
     # 1. Load and preprocess the CSV data.
@@ -128,30 +140,15 @@ def main():
     print("Test Loss:", test_loss)
 
     # 4. Train the model on the training set.
-    train(model, train_dataloader, criterion, optimizer, num_epochs=1000)
-
-    # 5. Evaluate the model on the test set.
-    model.eval()
-    test_loss = 0
-    predictions_list = []
-    actual_list = []
-    with torch.no_grad():
-        for batch_X, batch_y in test_dataloader:
-            outputs = model(batch_X)
-            loss = criterion(outputs, batch_y)
-            test_loss += loss.item()
-            predictions_list.append(outputs)
-            actual_list.append(batch_y)
-    test_loss /= len(test_dataloader)
-    print("Test Loss:", test_loss)
+    train(model, train_dataloader, test_dataloader, criterion, optimizer, num_epochs=1000)
 
     # Concatenate predictions and actual values.
     predictions_tensor = torch.cat(predictions_list, dim=0)
     actual_tensor = torch.cat(actual_list, dim=0)
 
     # Inverse transform predictions and actual values to original scale.
-    predictions = scaler_y.inverse_transform(predictions_tensor.numpy())
-    actuals = scaler_y.inverse_transform(actual_tensor.numpy())
+    # predictions = scaler_y.inverse_transform(predictions_tensor.numpy())
+    # actuals = scaler_y.inverse_transform(actual_tensor.numpy())
 
     # print("Predictions (original scale):", predictions)
     # print("Actuals (original scale):", actuals)

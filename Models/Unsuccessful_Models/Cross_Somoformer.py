@@ -1,25 +1,17 @@
-from torchvision.ops.misc import interpolate
 import sys
 if 'google.colab' in sys.modules:
     from Prometheus.Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
     from Prometheus.Models.load_config import dynamic_load_config
 else:
-    from Train.train_somoformer import train_model, get_original_data_loaders, get_long_term_data_loaders
-    from Models.load_config import dynamic_load_config
+    from Train.train_somoformer import train_model, get_original_data_loaders
+    from Models.Unsuccessful_Models.load_config import dynamic_load_config
 
-from enum import Enum
 import torch
 from torch import nn
-from torch.nn import L1Loss, MSELoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
-import numpy as np
-import math
 import torch.nn.functional as F
 import torch.nn.init as init
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 # TODO: fix positional encoding and token breakdown for input and output space
