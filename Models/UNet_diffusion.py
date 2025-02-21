@@ -354,7 +354,7 @@ def main():
     # Training Loop
     # -------------------------------
     date_string = datetime.now().strftime('%m-%d-%Y')
-    file = f'unet_diffusion_{date_string}.pth'
+    file = f'unet_diffusion_best_{date_string}.pth'
 
     best_c_loss = float('inf')
     corresponding_v_loss = float('inf')
