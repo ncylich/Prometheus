@@ -283,6 +283,9 @@ print(f"Initial UNet test loss: {calculate_test_loss(model_unet, test_loader)[0]
 # -------------------------------
 # STEP 7: Training Loop
 # -------------------------------
+best_c_loss = float('inf')
+corresponding_v_loss = float('inf')
+
 for epoch in range(epochs):
     model_unet.train()
     epoch_loss = 0.0
@@ -309,4 +312,10 @@ for epoch in range(epochs):
     print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
           f"Test Loss: Total={total_loss:.4f}, Close={c_loss:.4f}, Volume={v_loss:.4f}")
 
+    if c_loss < best_c_loss:
+        best_c_loss = c_loss
+        corresponding_v_loss = v_loss
+        torch.save(model_unet.state_dict(), 'unet_diffusion_best.pth')
+
 print("Training complete!")
+print("Best Close Loss: {:.4f}, Corresponding Volume: {:.4f}".format(best_c_loss, corresponding_v_loss))
