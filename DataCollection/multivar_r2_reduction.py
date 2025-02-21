@@ -22,7 +22,7 @@ def test_multivariate_regression(model, test_df, target_col, degree):
 
 def main():
     prop = .2
-    degree = 3  # Surprisingly, the R^2 values are highest when degree 1
+    degree = 1  # Surprisingly, the R^2 values are highest when degree 1
 
     df = pd.read_parquet(f'../Local_Data/unique_focused_futures_30min/interpolated_all_long_term_combo.parquet')
     # df = pd.read_parquet(f'../Local_Data/30min_long_term_merged_UNadjusted.parquet')
@@ -85,6 +85,12 @@ def main():
     mutlivar_test_reg = pd.DataFrame({col: [test_multivariate_regression(multivar_reg_train[col][1], test_df, col, degree)]
                                       for col in cols})[remaining_tickers]
     plot_2d_graph(mutlivar_test_reg, f'Final Test Multivariate R-Squared Values, degree={degree}')
+
+    # sorting the columns by R^2 value
+    sorted_cols = multivar_reg_train.keys()
+    sorted_cols = sorted(sorted_cols, key=lambda x: multivar_reg_train[x][0], reverse=True)
+    print("Sorted columns by R^2 value")
+    print(sorted_cols)
 
 
 if __name__ == "__main__":
