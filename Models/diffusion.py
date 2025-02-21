@@ -157,29 +157,42 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-def calculate_test_loss():
+def calculate_test_loss(model, loader):
     model.eval()
     total_loss = 0
+    close_loss = 0
+    volume_loss = 0
+    total_samples = 0
+
+    # Find indices for close and volume features
+    close_indices = [i for i, feat in enumerate(norm_features) if '_close_norm' in feat]
+    volume_indices = [i for i, feat in enumerate(norm_features) if '_volume_norm' in feat]
+
     with torch.no_grad():
-        for condition, target in tqdm(test_loader):
+        for condition, target in tqdm(loader):
             condition = condition.to(device)
             target = target.to(device)
             batch_size = target.shape[0]
-
-            # Sample random diffusion timesteps
             t = torch.randint(0, timesteps, (batch_size,), device=device)
             a_bar = extract(alphas_bar, t, target.shape)
-
-            # Add noise
             noise = torch.randn_like(target)
             noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
-
-            # Predict noise
             noise_pred = model(noisy_target, t, condition)
-            loss = loss_fn(noise_pred, noise)
-            total_loss += loss.item() * batch_size
 
-    return total_loss / len(test_dataset)
+            # Calculate separate losses
+            loss = loss_fn(noise_pred, noise)
+            close_batch_loss = loss_fn(noise_pred[:, close_indices], noise[:, close_indices])
+            volume_batch_loss = loss_fn(noise_pred[:, volume_indices], noise[:, volume_indices])
+
+            total_loss += loss.item() * batch_size
+            close_loss += close_batch_loss.item() * batch_size
+            volume_loss += volume_batch_loss.item() * batch_size
+            total_samples += batch_size
+
+    avg_loss = total_loss / total_samples
+    avg_close_loss = close_loss / total_samples
+    avg_volume_loss = volume_loss / total_samples
+    return avg_loss, avg_close_loss, avg_volume_loss
 
 
 # -------------------------------
@@ -206,33 +219,10 @@ naive_model = NaiveZeroModel(num_features).to(device)
 
 # Function to calculate test loss using the naive model.
 def calculate_naive_test_loss():
-    naive_model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for condition, target in tqdm(test_loader):
-            condition = condition.to(device)
-            target = target.to(device)
-            batch_size = target.shape[0]
+    return calculate_test_loss(naive_model, test_loader)
 
-            # Sample random diffusion timesteps
-            t = torch.randint(0, timesteps, (batch_size,), device=device)
-            a_bar = extract(alphas_bar, t, target.shape)
-
-            # Add noise to create a noisy target
-            noise = torch.randn_like(target)
-            noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
-
-            # Naively predict zeros instead of any learned noise
-            noise_pred = naive_model(noisy_target, t, condition)
-
-            # Compute the loss between the predicted zeros and the true noise
-            loss = loss_fn(noise_pred, noise)
-            total_loss += loss.item() * batch_size
-
-    return total_loss / len(test_dataset)
-
-# Print the baseline test loss for the naive zero-output model.
-print(f"Naive baseline test loss: {calculate_naive_test_loss():.4f}")
+total_loss, close_loss, volume_loss = calculate_naive_test_loss()
+print(f"Naive baseline - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
 
 
 # -------------------------------
@@ -246,7 +236,8 @@ model.to(device)
 betas = betas.to(device)
 alphas_bar = alphas_bar.to(device)
 
-print(f"Initial test loss: {calculate_test_loss():.4f}")
+total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
+print(f"Initial Diffusion Model - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
 
 for epoch in range(epochs):
     model.train()
@@ -277,7 +268,8 @@ for epoch in range(epochs):
         epoch_loss += loss.item() * batch_size
 
     epoch_loss /= len(train_dataset)
-    test_loss = calculate_test_loss()
-    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")
+    total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
+    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
+          f"Test Loss: Total={total_loss:.4f}, Close={close_loss:.4f}, Volume={volume_loss:.4f}")
 
 print("Training complete!")
