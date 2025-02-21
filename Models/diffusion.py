@@ -1,4 +1,5 @@
 # By end of tonight we will solve quant 🙏.
+
 import pandas as pd
 import numpy as np
 import torch
@@ -8,6 +9,9 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+# -------------------------------
+# Global Hyperparameters
+# -------------------------------
 epochs = 10
 window_size = 60
 test_size = 0.2
@@ -19,48 +23,32 @@ beta_start = 1e-4
 beta_end = 0.02
 
 
-# Loading df
-# df of futures data: ['date', 'CL_open', 'CL_high', 'CL_low', 'CL_close', 'CL_volume', ...]
-df = pd.read_parquet(f'../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
-df['date'] = pd.to_datetime(df['date'], utc=True)
-df['date'] = df['date'].dt.tz_convert('America/New_York')
+# -------------------------------
+# STEP 4: Diffusion Process Setup and Utility Functions
+# -------------------------------
+def linear_beta_schedule(timesteps, beta_initial=1e-4, beta_final=0.02):
+    """
+    Creates a linear schedule for beta values (common for DDPM).
+    """
+    return torch.linspace(beta_initial, beta_final, timesteps)
+
+
+def extract(a, t, x_shape):
+    """
+    Extracts coefficients for the given timesteps.
+
+    a: Tensor of shape [timesteps]
+    t: Tensor of diffusion timesteps with shape [batch]
+    x_shape: Shape of the target tensor
+    """
+    batch_size = t.shape[0]
+    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
+    return out
+
 
 # -------------------------------
-# STEP 1: Select Close and Volume features (for multiple instruments)
+# STEP 3: Dataset for Multivariate Time Series
 # -------------------------------
-# Choosing tickers
-target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
-reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
-df = df.filter(regex=reg_exp)
-
-# Extract all columns that end with '_close' or '_volume'
-feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
-print("Features:", feature_cols)
-
-# Sort by date and reset index
-df = df.sort_values('date').reset_index(drop=True)
-
-# -------------------------------
-# STEP 2: Normalize each feature using z-score normalization
-# -------------------------------
-col_norm_factors = {}  # Store the mean and std of each column
-for col in feature_cols:
-    df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
-    mean_val = df[col + '_norm'].mean()
-    std_val = df[col + '_norm'].std()
-    df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
-    col_norm_factors[col] = (mean_val, std_val)
-
-# List of normalized feature columns
-norm_features = [col + '_norm' for col in feature_cols]
-
-# -------------------------------
-# STEP 3: Create a dataset for multivariate time series
-# Each sample: historical window of shape [window_size, num_features]
-# and target: next timestep's vector [num_features]
-# -------------------------------
-
-
 class MultiStockDataset(Dataset):
     def __init__(self, df, feature_cols, window_size):
         self.df = df.reset_index(drop=True)
@@ -78,33 +66,9 @@ class MultiStockDataset(Dataset):
         return torch.tensor(condition), torch.tensor(target)
 
 
-dataset = MultiStockDataset(df, norm_features, window_size)
-dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
-
-
 # -------------------------------
-# STEP 4: Set up the diffusion process and model
-#
-# We define a linear beta schedule (common for DDPM) for timesteps,
-# and build a simple conditional diffusion model that predicts noise.
+# STEP 4: Define the Diffusion Model for Multivariate Time Series
 # -------------------------------
-def linear_beta_schedule(timesteps, beta_initial=1e-4, beta_final=0.02):
-    return torch.linspace(beta_initial, beta_final, timesteps)
-
-
-betas = linear_beta_schedule(timesteps, beta_start, beta_end)  # [timesteps]
-alphas = 1.0 - betas
-alphas_bar = torch.cumprod(alphas, dim=0)
-
-
-def extract(a, t, x_shape):
-    # a: [timesteps], t: [batch], x_shape: target shape
-    batch_size = t.shape[0]
-    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
-    return out
-
-
-# Define a basic diffusion model for multivariate time series
 class DiffusionTimeSeriesModelMulti(nn.Module):
     def __init__(self, window_size, num_features, hidden_dim=64):
         super().__init__()
@@ -140,25 +104,26 @@ class DiffusionTimeSeriesModelMulti(nn.Module):
         return noise_pred
 
 
-num_features = len(norm_features)
-model = DiffusionTimeSeriesModelMulti(window_size, num_features)
+# -------------------------------
+# STEP 5: Naive Baseline Model
+# -------------------------------
+class NaiveZeroModel(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+        self.num_features = num_features
 
-optimizer = optim.Adam(model.parameters(), lr=lr)
-loss_fn = nn.MSELoss()
+    def forward(self, x, t, condition):
+        # Simply return a tensor of zeros with the same shape as x.
+        return torch.zeros_like(x)
 
 
 # -------------------------------
-# STEP 4.5: Create train/test split and test loss function
+# STEP 4.5: Test Loss Calculation Function
 # -------------------------------
-train_size = int(len(dataset) * (1 - test_size))
-test_size = len(dataset) - train_size
-train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
-
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-
 def calculate_test_loss(model, loader):
+    """
+    Calculates the test loss along with separate losses for close and volume features.
+    """
     model.eval()
     total_loss = 0
     close_loss = 0
@@ -180,7 +145,6 @@ def calculate_test_loss(model, loader):
             noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
             noise_pred = model(noisy_target, t, condition)
 
-            # Calculate separate losses
             loss = loss_fn(noise_pred, noise)
             close_batch_loss = loss_fn(noise_pred[:, close_indices], noise[:, close_indices])
             volume_batch_loss = loss_fn(noise_pred[:, volume_indices], noise[:, volume_indices])
@@ -196,7 +160,11 @@ def calculate_test_loss(model, loader):
     return avg_loss, avg_close_loss, avg_volume_loss
 
 
-def validate_one_timestep():
+def calculate_naive_test_loss():
+    return calculate_test_loss(naive_model, test_loader)
+
+
+def validate_one_timestep(model, test_loader, alphas_bar):
     model.eval()
     with torch.no_grad():
         # Get one batch from the test loader and pick the first sample.
@@ -241,81 +209,145 @@ def validate_one_timestep():
     plt.show()
 
 # -------------------------------
-# STEP 5: Naive baseline model
+# Main Function
 # -------------------------------
+def main():
+    # -------------------------------
+    # Data Loading and Preprocessing
+    # -------------------------------
+    # Loading df of futures data: ['date', 'CL_open', 'CL_high', 'CL_low', 'CL_close', 'CL_volume', ...]
+    df = pd.read_parquet(f'../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
+    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df['date'] = df['date'].dt.tz_convert('America/New_York')
 
+    # -------------------------------
+    # STEP 1: Select Close and Volume Features (for multiple instruments)
+    # -------------------------------
+    # Choosing tickers
+    target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
+    reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
+    df = df.filter(regex=reg_exp)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# Naive baseline model: always outputs zeros, regardless of input.
-class NaiveZeroModel(nn.Module):
-    def __init__(self, num_features):
-        super().__init__()
-        self.num_features = num_features
+    # Extract all columns that end with '_close' or '_volume'
+    feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
+    print("Features:", feature_cols)
 
-    def forward(self, x, t, condition):
-        # x: [batch, num_features] - noisy target
-        # t: [batch] - diffusion timesteps (not used)
-        # condition: [batch, window_size, num_features] - historical window (not used)
-        # Simply return a tensor of zeros with the same shape as x.
-        return torch.zeros_like(x)
+    # Sort by date and reset index
+    df = df.sort_values('date').reset_index(drop=True)
 
-# Create an instance of the naive model and move it to the device.
-naive_model = NaiveZeroModel(num_features).to(device)
+    # -------------------------------
+    # STEP 2: Normalize Each Feature Using Z-Score Normalization
+    # -------------------------------
+    global norm_features  # Define as global so that calculate_test_loss can access it
+    col_norm_factors = {}  # Store the mean and std of each column
+    for col in feature_cols:
+        df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
+        mean_val = df[col + '_norm'].mean()
+        std_val = df[col + '_norm'].std()
+        df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
+        col_norm_factors[col] = (mean_val, std_val)
 
-# Function to calculate test loss using the naive model.
-def calculate_naive_test_loss():
-    return calculate_test_loss(naive_model, test_loader)
+    # List of normalized feature columns
+    norm_features = [col + '_norm' for col in feature_cols]
 
-total_loss, close_loss, volume_loss = calculate_naive_test_loss()
-print(f"Naive baseline - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
+    # -------------------------------
+    # STEP 3: Create a Dataset for Multivariate Time Series
+    # Each sample: historical window of shape [window_size, num_features]
+    # and target: next timestep's vector [num_features]
+    # -------------------------------
+    dataset = MultiStockDataset(df, norm_features, window_size)
+    # Create a DataLoader for the entire dataset (not used in training, kept for reference)
+    dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
 
+    # Create a train/test split
+    train_size_val = int(len(dataset) * (1 - test_size))
+    test_size_val = len(dataset) - train_size_val
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size_val, test_size_val])
+    global train_loader, test_loader
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-# -------------------------------
-# STEP 6: Training loop
-#
-# For each sample, we randomly choose a diffusion timestep t,
-# add noise to the target via the closed-form expression,
-# and train the model to predict the added noise.
-# -------------------------------
-model.to(device)
-betas = betas.to(device)
-alphas_bar = alphas_bar.to(device)
+    # -------------------------------
+    # STEP 4: Set Up the Diffusion Process and Model
+    # -------------------------------
+    betas = linear_beta_schedule(timesteps, beta_start, beta_end)  # [timesteps]
+    alphas = 1.0 - betas
+    global alphas_bar
+    alphas_bar = torch.cumprod(alphas, dim=0)
 
-total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
-print(f"Initial Diffusion Model - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
+    num_features = len(norm_features)
+    model = DiffusionTimeSeriesModelMulti(window_size, num_features)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    global loss_fn
+    loss_fn = nn.MSELoss()
 
-for epoch in range(epochs):
-    model.train()
-    epoch_loss = 0.0
-    for condition, target in tqdm(train_loader):
-        # Move data to device
-        condition = condition.to(device)
-        target = target.to(device)
-        batch_size = target.shape[0]
+    # -------------------------------
+    # STEP 4.5: Create Train/Test Split and Test Loss Function
+    # -------------------------------
+    # (Already created above: train_loader and test_loader)
 
-        # Sample random diffusion timesteps for each sample
-        t = torch.randint(0, timesteps, (batch_size,), device=device)
-        a_bar = extract(alphas_bar, t, target.shape)
+    # -------------------------------
+    # STEP 5: Naive Baseline Model
+    # -------------------------------
+    global device, naive_model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    betas = betas.to(device)
+    alphas_bar = alphas_bar.to(device)
+    naive_model = NaiveZeroModel(num_features).to(device)
 
-        # Sample Gaussian noise and create noisy target
-        noise = torch.randn_like(target)
-        noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
+    total_loss, close_loss, volume_loss = calculate_naive_test_loss()
+    print(
+        f"Naive baseline - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
 
-        # Predict the noise using the model
-        noise_pred = model(noisy_target, t, condition)
-        loss = loss_fn(noise_pred, noise)
-
-        optimizer.zero_grad()
-        loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient clipping
-        optimizer.step()
-
-        epoch_loss += loss.item() * batch_size
-
-    epoch_loss /= len(train_dataset)
+    # -------------------------------
+    # STEP 6: Training Loop
+    #
+    # For each sample, we randomly choose a diffusion timestep t,
+    # add noise to the target via the closed-form expression,
+    # and train the model to predict the added noise.
+    # -------------------------------
     total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
-    validate_one_timestep()
-    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
-          f"Test Loss: Total={total_loss:.4f}, Close={close_loss:.4f}, Volume={volume_loss:.4f}")
+    print(
+        f"Initial Diffusion Model - Total loss: {total_loss:.4f}, Close loss: {close_loss:.4f}, Volume loss: {volume_loss:.4f}")
 
-print("Training complete!")
+    for epoch in range(epochs):
+        model.train()
+        epoch_loss = 0.0
+        for condition, target in tqdm(train_loader):
+            # Move data to device
+            condition = condition.to(device)
+            target = target.to(device)
+            batch_size_current = target.shape[0]
+
+            # Sample random diffusion timesteps for each sample
+            t = torch.randint(0, timesteps, (batch_size_current,), device=device)
+            a_bar = extract(alphas_bar, t, target.shape)
+
+            # Sample Gaussian noise and create noisy target
+            noise = torch.randn_like(target)
+            noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
+
+            # Predict the noise using the model
+            noise_pred = model(noisy_target, t, condition)
+            loss = loss_fn(noise_pred, noise)
+
+            optimizer.zero_grad()
+            loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient clipping (optional)
+            optimizer.step()
+
+            epoch_loss += loss.item() * batch_size_current
+
+        epoch_loss /= len(train_dataset)
+        total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
+        validate_one_timestep(model, test_loader, alphas_bar)
+        print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
+              f"Test Loss: Total={total_loss:.4f}, Close={close_loss:.4f}, Volume={volume_loss:.4f}")
+
+    print("Training complete!")
+
+
+# Only run the main function if this script is executed directly
+if __name__ == '__main__':
+    main()

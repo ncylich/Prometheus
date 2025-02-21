@@ -1,4 +1,5 @@
 # By end of tonight we will solve quant 🙏.
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import torch
@@ -9,6 +10,9 @@ from tqdm import tqdm
 import sys
 import matplotlib.pyplot as plt
 
+# -------------------------------
+# Global Hyperparameters
+# -------------------------------
 epochs = 25
 window_size = 60
 test_size = 0.2
@@ -22,38 +26,21 @@ hidden_dim = 64      # condition embedding dimension
 base_channels = 32   # U-Net base channels
 
 # -------------------------------
-# Data Loading and Preprocessing
+# Diffusion Process Setup Functions
 # -------------------------------
-path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
-if 'google.colab' in sys.modules:
-    path = 'drive/MyDrive' + path[2:]
-df = pd.read_parquet(path)
-df['date'] = pd.to_datetime(df['date'], utc=True)
-df['date'] = df['date'].dt.tz_convert('America/New_York')
+def linear_beta_schedule(timesteps, beta_initial=1e-4, beta_final=0.02):
+    """Creates a linear schedule for the beta values used in the diffusion process."""
+    return torch.linspace(beta_initial, beta_final, timesteps)
 
-# STEP 1: Select Close and Volume features (for chosen tickers)
-target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
-reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
-df = df.filter(regex=reg_exp)
+def extract(a, t, x_shape):
+    """Extracts coefficients for a given timestep."""
+    batch_size = t.shape[0]
+    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
+    return out
 
-# Extract all columns ending with '_close' or '_volume'
-feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
-print("Features:", feature_cols)
-
-df = df.sort_values('date').reset_index(drop=True)
-
-# STEP 2: Normalize each feature using z-score normalization.
-col_norm_factors = {}
-for col in feature_cols:
-    df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
-    mean_val = df[col + '_norm'].mean()
-    std_val = df[col + '_norm'].std()
-    df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
-    col_norm_factors[col] = (mean_val, std_val)
-
-norm_features = [col + '_norm' for col in feature_cols]
-
-# STEP 3: Create dataset for multivariate time series.
+# -------------------------------
+# Dataset Definition for Multivariate Time Series
+# -------------------------------
 class MultiStockDataset(Dataset):
     def __init__(self, df, feature_cols, window_size):
         self.df = df.reset_index(drop=True)
@@ -64,34 +51,13 @@ class MultiStockDataset(Dataset):
         return len(self.df) - self.window_size
 
     def __getitem__(self, idx):
+        # STEP 3: Create dataset for multivariate time series.
         condition = self.df.loc[idx: idx + self.window_size - 1, self.feature_cols].values.astype(np.float32)
         target = self.df.loc[idx + self.window_size, self.feature_cols].values.astype(np.float32)
         return torch.tensor(condition), torch.tensor(target)
 
-dataset = MultiStockDataset(df, norm_features, window_size)
-train_size_val = int(len(dataset) * (1 - test_size))
-test_size_val = len(dataset) - train_size_val
-train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size_val, test_size_val])
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
 # -------------------------------
-# STEP 4: Diffusion Process Setup
-# -------------------------------
-def linear_beta_schedule(timesteps, beta_initial=1e-4, beta_final=0.02):
-    return torch.linspace(beta_initial, beta_final, timesteps)
-
-betas = linear_beta_schedule(timesteps, beta_start, beta_end)
-alphas = 1.0 - betas
-alphas_bar = torch.cumprod(alphas, dim=0)
-
-def extract(a, t, x_shape):
-    batch_size = t.shape[0]
-    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
-    return out
-
-# -------------------------------
-# STEP 5: Model Architecture: U-Net with Skip Connections
+# Model Architecture: U-Net with Skip Connections
 # -------------------------------
 
 # (A) Condition Embedding
@@ -219,25 +185,19 @@ class DiffusionTimeSeriesModelUNet(nn.Module):
         return out.squeeze(1)
 
 # -------------------------------
-# STEP 6: Optimizer, Loss, and Test Functions
+# Optimizer, Loss, and Test Functions
 # -------------------------------
-num_features = len(norm_features)
-model_unet = DiffusionTimeSeriesModelUNet(window_size, num_features, hidden_dim, base_channels)
-optimizer = optim.Adam(model_unet.parameters(), lr=lr)
-loss_fn = nn.MSELoss()
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model_unet.to(device)
-betas = betas.to(device)
-alphas_bar = alphas_bar.to(device)
-
-def calculate_test_loss(model, loader):
+def calculate_test_loss(model, loader, norm_features, device, timesteps, alphas_bar, loss_fn):
+    """
+    Calculates the test loss along with separate losses for close and volume features.
+    """
     model.eval()
     total_loss = 0
     close_loss = 0
     volume_loss = 0
     total_samples = 0
 
+    # Identify indices corresponding to close and volume features.
     close_indices = [i for i, feat in enumerate(norm_features) if '_close_norm' in feat]
     volume_indices = [i for i, feat in enumerate(norm_features) if '_volume_norm' in feat]
 
@@ -265,7 +225,7 @@ def calculate_test_loss(model, loader):
     avg_volume_loss = volume_loss / total_samples
     return avg_loss, avg_close_loss, avg_volume_loss
 
-def validate_one_timestep():
+def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar):
     model_unet.eval()
     with torch.no_grad():
         # Get one batch from the test loader and pick the first sample.
@@ -316,52 +276,124 @@ class NaiveZeroModel(nn.Module):
     def forward(self, x, t, condition):
         return torch.zeros_like(x)
 
-naive_model = NaiveZeroModel(num_features).to(device)
-
-def calculate_naive_test_loss():
-    return calculate_test_loss(naive_model, test_loader)
-
-total_loss, c_loss, v_loss = calculate_naive_test_loss()
-print(f"Naive baseline - Total loss: {total_loss:.4f}, Close loss: {c_loss:.4f}, Volume loss: {v_loss:.4f}")
-print(f"Initial UNet test loss: {calculate_test_loss(model_unet, test_loader)[0]:.4f}")
+def calculate_naive_test_loss(naive_model, test_loader, norm_features, device, timesteps, alphas_bar, loss_fn):
+    return calculate_test_loss(naive_model, test_loader, norm_features, device, timesteps, alphas_bar, loss_fn)
 
 # -------------------------------
-# STEP 7: Training Loop
+# Main Function
 # -------------------------------
-best_c_loss = float('inf')
-corresponding_v_loss = float('inf')
+def main():
+    # -------------------------------
+    # Data Loading and Preprocessing
+    # -------------------------------
+    path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
+    if 'google.colab' in sys.modules:
+        path = 'drive/MyDrive' + path[2:]
+    df = pd.read_parquet(path)
+    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df['date'] = df['date'].dt.tz_convert('America/New_York')
 
-for epoch in range(epochs):
-    model_unet.train()
-    epoch_loss = 0.0
-    for condition, target in tqdm(train_loader):
-        condition = condition.to(device)
-        target = target.to(device)
-        batch_size = target.shape[0]
-        t = torch.randint(0, timesteps, (batch_size,), device=device)
-        a_bar = extract(alphas_bar, t, target.shape)
-        noise = torch.randn_like(target)
-        noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
+    # STEP 1: Select Close and Volume features (for chosen tickers)
+    target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
+    reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
+    df = df.filter(regex=reg_exp)
 
-        noise_pred = model_unet(noisy_target, t, condition)
-        loss = loss_fn(noise_pred, noise)
+    # Extract all columns ending with '_close' or '_volume'
+    feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
+    print("Features:", feature_cols)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    df = df.sort_values('date').reset_index(drop=True)
 
-        epoch_loss += loss.item() * batch_size
+    # STEP 2: Normalize each feature using z-score normalization.
+    col_norm_factors = {}
+    for col in feature_cols:
+        df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
+        mean_val = df[col + '_norm'].mean()
+        std_val = df[col + '_norm'].std()
+        df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
+        col_norm_factors[col] = (mean_val, std_val)
 
-    epoch_loss /= len(train_dataset)
-    total_loss, c_loss, v_loss = calculate_test_loss(model_unet, test_loader)
-    validate_one_timestep()
-    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
-          f"Test Loss: Total={total_loss:.4f}, Close={c_loss:.4f}, Volume={v_loss:.4f}")
+    norm_features = [col + '_norm' for col in feature_cols]
 
-    if c_loss < best_c_loss:
-        best_c_loss = c_loss
-        corresponding_v_loss = v_loss
-        torch.save(model_unet.state_dict(), 'unet_diffusion_best.pth')
+    # Create dataset for multivariate time series.
+    dataset = MultiStockDataset(df, norm_features, window_size)
+    train_size_val = int(len(dataset) * (1 - test_size))
+    test_size_val = len(dataset) - train_size_val
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size_val, test_size_val])
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-print("Training complete!")
-print("Best Close Loss: {:.4f}, Corresponding Volume: {:.4f}".format(best_c_loss, corresponding_v_loss))
+    # -------------------------------
+    # Diffusion Process Setup
+    # -------------------------------
+    betas = linear_beta_schedule(timesteps, beta_start, beta_end)
+    alphas = 1.0 - betas
+    alphas_bar = torch.cumprod(alphas, dim=0)
+
+    # -------------------------------
+    # Model, Optimizer, Loss, and Device Setup
+    # -------------------------------
+    num_features = len(norm_features)
+    model_unet = DiffusionTimeSeriesModelUNet(window_size, num_features, hidden_dim, base_channels)
+    optimizer = optim.Adam(model_unet.parameters(), lr=lr)
+    loss_fn = nn.MSELoss()
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_unet.to(device)
+    betas = betas.to(device)
+    alphas_bar = alphas_bar.to(device)
+
+    # Naive model baseline
+    naive_model = NaiveZeroModel(num_features).to(device)
+    total_loss, c_loss, v_loss = calculate_naive_test_loss(naive_model, test_loader, norm_features, device, timesteps, alphas_bar, loss_fn)
+    print(f"Naive baseline - Total loss: {total_loss:.4f}, Close loss: {c_loss:.4f}, Volume loss: {v_loss:.4f}")
+    init_unet_loss = calculate_test_loss(model_unet, test_loader, norm_features, device, timesteps, alphas_bar, loss_fn)[0]
+    print(f"Initial UNet test loss: {init_unet_loss:.4f}")
+
+    # -------------------------------
+    # Training Loop
+    # -------------------------------
+    date_string = datetime.now().strftime('%m-%d-%Y')
+    file = f'unet_diffusion_{date_string}.pth'
+
+    best_c_loss = float('inf')
+    corresponding_v_loss = float('inf')
+
+    for epoch in range(epochs):
+        model_unet.train()
+        epoch_loss = 0.0
+        for condition, target in tqdm(train_loader):
+            condition = condition.to(device)
+            target = target.to(device)
+            batch_size_current = target.shape[0]
+            t = torch.randint(0, timesteps, (batch_size_current,), device=device)
+            a_bar = extract(alphas_bar, t, target.shape)
+            noise = torch.randn_like(target)
+            noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
+
+            noise_pred = model_unet(noisy_target, t, condition)
+            loss = loss_fn(noise_pred, noise)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item() * batch_size_current
+
+        epoch_loss /= len(train_dataset)
+        total_loss, c_loss, v_loss = calculate_test_loss(model_unet, test_loader, norm_features, device, timesteps, alphas_bar, loss_fn)
+        validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar)
+        print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
+              f"Test Loss: Total={total_loss:.4f}, Close={c_loss:.4f}, Volume={v_loss:.4f}")
+
+        if c_loss < best_c_loss:
+            best_c_loss = c_loss
+            corresponding_v_loss = v_loss
+            torch.save(model_unet.state_dict(), file)
+
+    print("Training complete!")
+    print("Best Close Loss: {:.4f}, Corresponding Volume: {:.4f}".format(best_c_loss, corresponding_v_loss))
+
+# Only run the main function if this script is executed directly
+if __name__ == '__main__':
+    main()
