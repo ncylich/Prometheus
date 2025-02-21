@@ -7,6 +7,17 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
+epochs = 10
+window_size = 60
+test_size = 0.2
+batch_size = 1024
+lr = 1e-3
+
+timesteps = 100  # total diffusion steps
+beta_start = 1e-4
+beta_end = 0.02
+
+
 # Loading df
 # df of futures data: ['date', 'CL_open', 'CL_high', 'CL_low', 'CL_close', 'CL_volume', ...]
 df = pd.read_parquet(f'../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
@@ -47,7 +58,6 @@ norm_features = [col + '_norm' for col in feature_cols]
 # Each sample: historical window of shape [window_size, num_features]
 # and target: next timestep's vector [num_features]
 # -------------------------------
-window_size = 60
 
 
 class MultiStockDataset(Dataset):
@@ -77,14 +87,11 @@ dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
 # We define a linear beta schedule (common for DDPM) for timesteps,
 # and build a simple conditional diffusion model that predicts noise.
 # -------------------------------
-def linear_beta_schedule(timesteps):
-    beta_start = 1e-4
-    beta_end = 0.02
-    return torch.linspace(beta_start, beta_end, timesteps)
+def linear_beta_schedule(timesteps, beta_initial=1e-4, beta_final=0.02):
+    return torch.linspace(beta_initial, beta_final, timesteps)
 
 
-timesteps = 100  # total diffusion steps
-betas = linear_beta_schedule(timesteps)  # [timesteps]
+betas = linear_beta_schedule(timesteps, beta_start, beta_end)  # [timesteps]
 alphas = 1.0 - betas
 alphas_bar = torch.cumprod(alphas, dim=0)
 
@@ -135,20 +142,19 @@ class DiffusionTimeSeriesModelMulti(nn.Module):
 num_features = len(norm_features)
 model = DiffusionTimeSeriesModelMulti(window_size, num_features)
 
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
+optimizer = optim.Adam(model.parameters(), lr=lr)
 loss_fn = nn.MSELoss()
 
 
 # -------------------------------
 # STEP 4.5: Create train/test split and test loss function
 # -------------------------------
-test_size = 0.2
 train_size = int(len(dataset) * (1 - test_size))
 test_size = len(dataset) - train_size
 train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 
-train_loader = DataLoader(train_dataset, batch_size=1024, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
 def calculate_test_loss():
@@ -236,7 +242,6 @@ print(f"Naive baseline test loss: {calculate_naive_test_loss():.4f}")
 # add noise to the target via the closed-form expression,
 # and train the model to predict the added noise.
 # -------------------------------
-epochs = 10
 model.to(device)
 betas = betas.to(device)
 alphas_bar = alphas_bar.to(device)
