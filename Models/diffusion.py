@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 epochs = 10
 window_size = 60
@@ -195,6 +196,50 @@ def calculate_test_loss(model, loader):
     return avg_loss, avg_close_loss, avg_volume_loss
 
 
+def validate_one_timestep():
+    model.eval()
+    with torch.no_grad():
+        # Get one batch from the test loader and pick the first sample.
+        condition, target = next(iter(test_loader))
+        condition_sample = condition[0:1].to(device)  # shape: [1, window_size, num_features]
+        target_sample = target[0:1].to(device)  # shape: [1, num_features]
+
+        # Choose a fixed diffusion timestep for clarity, e.g., t = timesteps // 2.
+        t = torch.tensor([timesteps // 2], device=device)
+        a_bar = extract(alphas_bar, t, target_sample.shape)
+
+        # Forward process: add noise to create the noised target.
+        noise = torch.randn_like(target_sample)
+        noisy_target = torch.sqrt(a_bar) * target_sample + torch.sqrt(1 - a_bar) * noise
+
+        # Model prediction: predict the noise given the noised target and condition.
+        noise_pred = model(noisy_target, t, condition_sample)
+
+        # Reverse process: compute the predicted (denoised) target.
+        predicted_target = (noisy_target - torch.sqrt(1 - a_bar) * noise_pred) / torch.sqrt(a_bar)
+
+        # Convert tensors to numpy arrays for plotting.
+        noisy_np = noisy_target.cpu().numpy().flatten()
+        predicted_np = predicted_target.cpu().numpy().flatten()
+        target_np = target_sample.cpu().numpy().flatten()
+
+    # Create a grouped bar chart over the feature indices.
+    feature_indices = np.arange(len(target_np))
+    bar_width = 0.25
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(feature_indices - bar_width, noisy_np, width=bar_width, label='Noised Input')
+    plt.bar(feature_indices, predicted_np, width=bar_width, label='Diffusion Output')
+    plt.bar(feature_indices + bar_width, target_np, width=bar_width, label='Ground Truth')
+
+    plt.xlabel("Feature Index")
+    plt.ylabel("Normalized Value")
+    plt.title("Validation: Noised Input vs. Diffusion Output vs. Ground Truth (1 Timestep)")
+    plt.xticks(feature_indices)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 # -------------------------------
 # STEP 5: Naive baseline model
 # -------------------------------
@@ -269,6 +314,7 @@ for epoch in range(epochs):
 
     epoch_loss /= len(train_dataset)
     total_loss, close_loss, volume_loss = calculate_test_loss(model, test_loader)
+    validate_one_timestep()
     print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss:.4f}, "
           f"Test Loss: Total={total_loss:.4f}, Close={close_loss:.4f}, Volume={volume_loss:.4f}")
 
