@@ -261,7 +261,7 @@ def linear_ticker_regression(df, ticker, train_prop=0.8, degree=1):
 
 
 def main():
-    df = pd.read_parquet(f'../Local_Data/interpolated_all_long_term_combo.parquet')
+    df = pd.read_parquet(f'../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
     df['date'] = pd.to_datetime(df['date'], utc=True)
     df['date'] = df['date'].dt.tz_convert('America/New_York')
 

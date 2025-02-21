@@ -31,11 +31,13 @@ df = df.sort_values('date').reset_index(drop=True)
 # -------------------------------
 # STEP 2: Normalize each feature using z-score normalization
 # -------------------------------
+col_norm_factors = {}  # Store the mean and std of each column
 for col in feature_cols:
     df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
     mean_val = df[col + '_norm'].mean()
     std_val = df[col + '_norm'].std()
     df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
+    col_norm_factors[col] = (mean_val, std_val)
 
 # List of normalized feature columns
 norm_features = [col + '_norm' for col in feature_cols]
@@ -175,14 +177,66 @@ def calculate_test_loss():
 
 
 # -------------------------------
-# STEP 5: Training loop
+# STEP 5: Naive baseline model
+# -------------------------------
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Naive baseline model: always outputs zeros, regardless of input.
+class NaiveZeroModel(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+        self.num_features = num_features
+
+    def forward(self, x, t, condition):
+        # x: [batch, num_features] - noisy target
+        # t: [batch] - diffusion timesteps (not used)
+        # condition: [batch, window_size, num_features] - historical window (not used)
+        # Simply return a tensor of zeros with the same shape as x.
+        return torch.zeros_like(x)
+
+# Create an instance of the naive model and move it to the device.
+naive_model = NaiveZeroModel(num_features).to(device)
+
+# Function to calculate test loss using the naive model.
+def calculate_naive_test_loss():
+    naive_model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for condition, target in tqdm(test_loader):
+            condition = condition.to(device)
+            target = target.to(device)
+            batch_size = target.shape[0]
+
+            # Sample random diffusion timesteps
+            t = torch.randint(0, timesteps, (batch_size,), device=device)
+            a_bar = extract(alphas_bar, t, target.shape)
+
+            # Add noise to create a noisy target
+            noise = torch.randn_like(target)
+            noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
+
+            # Naively predict zeros instead of any learned noise
+            noise_pred = naive_model(noisy_target, t, condition)
+
+            # Compute the loss between the predicted zeros and the true noise
+            loss = loss_fn(noise_pred, noise)
+            total_loss += loss.item() * batch_size
+
+    return total_loss / len(test_dataset)
+
+# Print the baseline test loss for the naive zero-output model.
+print(f"Naive baseline test loss: {calculate_naive_test_loss():.4f}")
+
+
+# -------------------------------
+# STEP 6: Training loop
 #
 # For each sample, we randomly choose a diffusion timestep t,
 # add noise to the target via the closed-form expression,
 # and train the model to predict the added noise.
 # -------------------------------
 epochs = 10
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 betas = betas.to(device)
 alphas_bar = alphas_bar.to(device)
