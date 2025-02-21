@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import sys
 
 epochs = 25
 window_size = 60
@@ -22,7 +23,10 @@ base_channels = 32   # U-Net base channels
 # -------------------------------
 # Data Loading and Preprocessing
 # -------------------------------
-df = pd.read_parquet(f'../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
+path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
+if 'google.colab' in sys.modules:
+    path = 'drive/MyDrive' + path[2:]
+df = pd.read_parquet(path)
 df['date'] = pd.to_datetime(df['date'], utc=True)
 df['date'] = df['date'].dt.tz_convert('America/New_York')
 
