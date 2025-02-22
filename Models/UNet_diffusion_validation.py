@@ -3,6 +3,7 @@ import argparse
 import torch
 import numpy as np
 import pandas as pd
+import random
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from UNet_diffusion import (
@@ -11,6 +12,14 @@ from UNet_diffusion import (
     extract,
     batch_size
 )
+
+# -------------------------------
+# Set Random Seed for Reproducibility
+# -------------------------------
+seed = 42
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
 
 # -------------------------------
 # Full Reverse Diffusion Inference Function
@@ -83,27 +92,34 @@ class NaiveZeroModel:
         # Create zeros tensor with same shape as target (last timestep, all features)
         return torch.zeros(condition.shape[0], condition.shape[2], device=self.device)
 
-def calculate_naive_mse(test_loader, device):
+def calculate_naive_mse(test_loader, device, close_indices, volume_indices):
     """
-    Calculate MSE for a naive model that always predicts zeros.
+    Calculate MSE for a naive model that always predicts zeros, separately for close and volume features.
     """
     naive_model = NaiveZeroModel(device)
-    mse_loss = torch.nn.MSELoss(reduction='sum')
-    total_mse = 0.0
+    mse_loss_fn = torch.nn.MSELoss(reduction='sum')
+    total_overall = 0.0
+    total_close = 0.0
+    total_volume = 0.0
     total_samples = 0
 
     with torch.no_grad():
         for condition, target in tqdm(test_loader, desc='Naive Zero Model'):
             condition = condition.to(device)
             target = target.to(device)
-            # Now we can pass None for x and t since we'll use condition's shape
             pred = naive_model(None, None, condition)
-            loss = mse_loss(pred, target)
-            total_mse += loss.item()
+            overall_loss = mse_loss_fn(pred, target)
+            close_loss = mse_loss_fn(pred[:, close_indices], target[:, close_indices])
+            volume_loss = mse_loss_fn(pred[:, volume_indices], target[:, volume_indices])
+            total_overall += overall_loss.item()
+            total_close += close_loss.item()
+            total_volume += volume_loss.item()
             total_samples += target.shape[0]
 
-    overall_mse = total_mse / total_samples
-    return overall_mse
+    overall_mse = total_overall / total_samples
+    close_mse = total_close / total_samples
+    volume_mse = total_volume / total_samples
+    return overall_mse, close_mse, volume_mse
 
 # -------------------------------
 # Main Function
@@ -164,6 +180,10 @@ def main():
     # List of normalized feature columns
     norm_features = [col + '_norm' for col in feature_cols]
 
+    # Determine indices for close and volume features based on the normalized column names
+    close_indices = [i for i, f in enumerate(norm_features) if '_close' in f]
+    volume_indices = [i for i, f in enumerate(norm_features) if '_volume' in f]
+
     # Create test dataset and dataloader
     dataset = MultiStockDataset(df, norm_features, args.window_size)
     test_size_val = int(len(dataset) * 0.2)
@@ -173,12 +193,14 @@ def main():
     # -------------------------------
     # Run Full Inference on the Test Set and Calculate MSE
     # -------------------------------
-    # Calculate baseline MSE with naive zero model
-    naive_mse = calculate_naive_mse(test_loader, device)
-    print(f"Naive Zero Model MSE on test set: {naive_mse:.6f}")
+    # Calculate baseline MSE with naive zero model separately for close and volume
+    naive_overall, naive_close, naive_volume = calculate_naive_mse(test_loader, device, close_indices, volume_indices)
+    print(f"Naive Zero Model MSE on test set: overall {naive_overall:.6f}, close {naive_close:.6f}, volume {naive_volume:.6f}")
 
-    mse_loss = torch.nn.MSELoss(reduction='sum')
-    total_mse = 0.0
+    mse_loss_fn = torch.nn.MSELoss(reduction='sum')
+    total_overall = 0.0
+    total_close = 0.0
+    total_volume = 0.0
     total_samples = 0
 
     model.eval()
@@ -188,13 +210,19 @@ def main():
             target = target.to(device)          # shape: [B, num_features]
             # Run full reverse diffusion to generate prediction from the condition
             pred = full_inference(model, condition, betas, alphas, alphas_bar, args.timesteps, device)
-            # Compute MSE between the predicted target and the actual target
-            loss = mse_loss(pred, target)
-            total_mse += loss.item()
+            # Compute MSE between the predicted target and the actual target for overall, close, and volume features
+            overall_loss = mse_loss_fn(pred, target)
+            close_loss = mse_loss_fn(pred[:, close_indices], target[:, close_indices])
+            volume_loss = mse_loss_fn(pred[:, volume_indices], target[:, volume_indices])
+            total_overall += overall_loss.item()
+            total_close += close_loss.item()
+            total_volume += volume_loss.item()
             total_samples += target.shape[0]
 
-    overall_mse = total_mse / total_samples
-    print(f"Overall MSE on test set: {overall_mse:.6f}")
+    overall_mse = total_overall / total_samples
+    close_mse = total_close / total_samples
+    volume_mse = total_volume / total_samples
+    print(f"Diffusion Model MSE on test set: overall {overall_mse:.6f}, close {close_mse:.6f}, volume {volume_mse:.6f}")
 
 if __name__ == '__main__':
     main()
