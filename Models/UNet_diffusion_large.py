@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 # Global Hyperparameters
 # -------------------------------
 epochs = 100
-window_size = 60
+window_size = 64
 test_size = 0.2
 batch_size = 512
 lr = 1e-3
