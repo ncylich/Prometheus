@@ -20,8 +20,8 @@ batch_size = 512
 lr = 1e-3
 dropout_rate = 0.2
 
-l1_weight = 0  # 1e-5
-l2_weight = 0  # 1e-4
+l1_weight = 1e-5  # 1e-5
+l2_weight = 1e-5  # 1e-5
 timesteps = 100  # total diffusion steps
 beta_start = 1e-4
 beta_end = 0.02
