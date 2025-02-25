@@ -46,6 +46,19 @@ class MultiStockDataset(Dataset):
         target = self.df.loc[idx + self.window_size, self.target_cols].values.astype(np.float32)
         return torch.tensor(condition), torch.tensor(target)
 
+
+# -------------------------------
+# Naive Zero Model (for Testing)
+# -------------------------------
+class NaiveZeroModel(nn.Module):
+    def __init__(self, output_features):
+        super().__init__()
+        self.output_features = output_features
+
+    def forward(self, x, t, condition):
+        return torch.zeros_like(x)
+
+
 # -------------------------------
 # Data Loading and Preprocessing
 # -------------------------------
@@ -254,5 +267,5 @@ if __name__ == '__main__':
         hidden_dim=128,
         base_channels=32,
         dropout_rate=0.2,
-        model_class=None  # This can be set to a dummy or omitted when running trainer directly.
+        model_class=NaiveZeroModel  # This can be set to a dummy or omitted when running trainer directly.
     )

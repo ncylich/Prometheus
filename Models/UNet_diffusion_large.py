@@ -202,14 +202,6 @@ class DiffusionTimeSeriesModelUNetLarge(nn.Module):
         out = self.unet(x_in, cond)          # [B, 1, output_features]
         return out.squeeze(1)
 
-# (G) A Naive Zero Model for baseline comparisons.
-class NaiveZeroModel(nn.Module):
-    def __init__(self, output_features):
-        super().__init__()
-        self.output_features = output_features
-
-    def forward(self, x, t, condition):
-        return torch.zeros_like(x)
 
 # -------------------------------
 # Main Method: Call Training & Data Processing Code
