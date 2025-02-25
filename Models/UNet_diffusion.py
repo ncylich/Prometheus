@@ -13,6 +13,8 @@ TEST_SIZE = 0.2
 BATCH_SIZE = 1024
 LR = 1e-3
 
+L1_WEIGHT = 1e-5
+L2_WEIGHT = 1e-5
 TIMESTEPS = 100      # total diffusion steps
 BETA_START = 1e-4
 BETA_END = 0.02

@@ -13,12 +13,8 @@ import matplotlib.pyplot as plt
 
 
 # -------------------------------
-# Diffusion Process Helper Function
+# Extracts coefficients for a given timestep in the diffusion process.
 # -------------------------------
-def linear_beta_schedule(timesteps, beta_initial, beta_final):
-    """Creates a linear schedule for the beta values used in the diffusion process."""
-    return torch.linspace(beta_initial, beta_final, timesteps)
-
 def extract(a, t, x_shape):
     """Extracts coefficients for a given timestep."""
     batch_size = t.shape[0]
