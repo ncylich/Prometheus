@@ -32,18 +32,6 @@ torch.manual_seed(seed)
 np.random.seed(seed)
 random.seed(seed)
 
-# -------------------------------
-# Diffusion Process Helper Functions
-# -------------------------------
-def linear_beta_schedule(timesteps, beta_initial=BETA_START, beta_final=BETA_END):
-    """Creates a linear schedule for the beta values used in the diffusion process."""
-    return torch.linspace(beta_initial, beta_final, timesteps)
-
-def extract(a, t, x_shape):
-    """Extracts coefficients for a given timestep."""
-    batch_size = t.shape[0]
-    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
-    return out
 
 # -------------------------------
 # Model Architecture
