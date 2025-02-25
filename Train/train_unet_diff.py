@@ -97,13 +97,13 @@ def load_data(path, window_size):
 # -------------------------------
 # Evaluation Functions
 # -------------------------------
-def calculate_test_loss(model, loader, device, timesteps, alphas_bar, loss_fn, extract_fn):
+def calculate_test_loss(model, test_loader, device, timesteps, alphas_bar, loss_fn, extract_fn):
     model.eval()
     total_loss = 0
     total_samples = 0
 
     with torch.no_grad():
-        for condition, target in tqdm(loader, desc="Testing"):
+        for condition, target in tqdm(test_loader, desc="Testing"):
             condition = condition.to(device)  # full condition (price & volume)
             target = target.to(device)         # price-only target
             batch_size = target.shape[0]
@@ -114,9 +114,8 @@ def calculate_test_loss(model, loader, device, timesteps, alphas_bar, loss_fn, e
             noise_pred = model(noisy_target, t, condition)
             loss = loss_fn(noise_pred, noise)
             total_loss += loss.item() * batch_size
-            total_samples += batch_size
 
-    avg_loss = total_loss / total_samples
+    avg_loss = total_loss / len(test_loader)
     return avg_loss
 
 def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar, extract_fn):
@@ -235,7 +234,7 @@ class DiffusionTrainer:
 
                 epoch_loss += loss.item() * batch_size_current
 
-            epoch_loss /= len(train_dataset)
+            epoch_loss /= len(train_loader)
             test_loss = calculate_test_loss(model, test_loader, self.device,
                                             self.timesteps, alphas_bar, mse_criterion, extract)
             print(f"Epoch {epoch+1}/{self.epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")
