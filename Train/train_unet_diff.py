@@ -11,6 +11,17 @@ from tqdm import tqdm
 import sys
 import matplotlib.pyplot as plt
 
+
+# -------------------------------
+# Diffusion Process Helper Function
+# -------------------------------
+def extract(a, t, x_shape):
+    """Extracts coefficients for a given timestep."""
+    batch_size = t.shape[0]
+    out = a.gather(0, t).reshape(batch_size, *((1,) * (len(x_shape) - 1)))
+    return out
+
+
 # -------------------------------
 # Dataset Definition for Multivariate Time Series
 # -------------------------------
