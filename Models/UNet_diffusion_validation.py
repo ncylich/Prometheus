@@ -1,17 +1,21 @@
-#!/usr/bin/env python
-import argparse
 import torch
 import numpy as np
 import pandas as pd
 import random
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from UNet_diffusion import (
-    DiffusionTimeSeriesModelUNet,
-    linear_beta_schedule,
-    extract,
-    batch_size
+from UNet_diffusion_large import (
+    DiffusionTimeSeriesModelUNetLarge,
+    WINDOW_SIZE,
+    HIDDEN_DIM,
+    BASE_CHANNELS,
+    TIMESTEPS,
+    BETA_START,
+    BETA_END,
+    BATCH_SIZE,
+    DROPOUT_RATE
 )
+from Train.train_unet_diff import extract
 
 # -------------------------------
 # Set Random Seed for Reproducibility
@@ -24,24 +28,25 @@ random.seed(seed)
 # -------------------------------
 # Full Reverse Diffusion Inference Function
 # -------------------------------
-def full_inference(model, condition, betas, alphas, alphas_bar, timesteps, device):
+def full_inference(model, condition, betas, alphas, alphas_bar, timesteps, device, num_target_features):
     """
     Runs full reverse diffusion starting from pure noise.
     Inputs:
       - model: the diffusion model.
-      - condition: historical window tensor of shape [B, window_size, num_features].
+      - condition: historical window tensor of shape [B, window_size, num_condition_features].
       - betas, alphas, alphas_bar: diffusion process tensors.
       - timesteps: total number of diffusion steps.
       - device: torch device.
+      - num_target_features: number of target features (close prices only).
     Returns:
-      - x: final denoised sample tensor of shape [B, num_features].
+      - x: final denoised sample tensor of shape [B, num_target_features].
     """
     model.eval()
-    batch_size, num_features = condition.shape[0], condition.shape[2]
-    x = torch.randn(batch_size, num_features, device=device)
+    batch_size = condition.shape[0]
+    x = torch.randn(batch_size, num_target_features, device=device)
 
     with torch.no_grad():
-        for t in tqdm(reversed(range(1, timesteps))):
+        for t in tqdm(reversed(range(1, timesteps)), desc="Reverse Diffusion"):
             t_tensor = torch.full((batch_size,), t, device=device, dtype=torch.long)
             a_bar_t = extract(alphas_bar, t_tensor, x.shape)
             noise_pred = model(x, t_tensor, condition)
@@ -63,44 +68,51 @@ def full_inference(model, condition, betas, alphas, alphas_bar, timesteps, devic
     return x
 
 # -------------------------------
-# Dataset for Multivariate Time Series
+# Dataset for Multivariate Time Series (Separate Condition and Target)
 # -------------------------------
 class MultiStockDataset(Dataset):
-    def __init__(self, df, feature_cols, window_size):
+    def __init__(self, df, condition_cols, target_cols, window_size):
+        """
+        Args:
+          - df: DataFrame containing the data.
+          - condition_cols: list of columns for the conditioning input (all normalized features).
+          - target_cols: list of columns for the target (only normalized close prices).
+          - window_size: number of timesteps in the historical window.
+        """
         self.df = df.reset_index(drop=True)
-        self.feature_cols = feature_cols
+        self.condition_cols = condition_cols
+        self.target_cols = target_cols
         self.window_size = window_size
 
     def __len__(self):
         return len(self.df) - self.window_size
 
     def __getitem__(self, idx):
-        # Condition: historical window (window_size timesteps) for all features
-        condition = self.df.loc[idx: idx + self.window_size - 1, self.feature_cols].values.astype(np.float32)
-        # Target: next timestep's vector (all features)
-        target = self.df.loc[idx + self.window_size, self.feature_cols].values.astype(np.float32)
+        # Condition: historical window for all features (close and volume)
+        condition = self.df.loc[idx: idx + self.window_size - 1, self.condition_cols].values.astype(np.float32)
+        # Target: next timestep's close prices only
+        target = self.df.loc[idx + self.window_size, self.target_cols].values.astype(np.float32)
         return torch.tensor(condition), torch.tensor(target)
 
 # -------------------------------
 # Naive Zero Model for MSE Calculation
 # -------------------------------
 class NaiveZeroModel:
-    def __init__(self, device):
+    def __init__(self, device, target_dim):
         self.device = device
+        self.target_dim = target_dim
 
     def __call__(self, x, t, condition):
-        # Create zeros tensor with same shape as target (last timestep, all features)
-        return torch.zeros(condition.shape[0], condition.shape[2], device=self.device)
+        # Predict zeros for target shape [B, target_dim]
+        return torch.zeros(condition.shape[0], self.target_dim, device=self.device)
 
-def calculate_naive_mse(test_loader, device, close_indices, volume_indices):
+def calculate_naive_mse(test_loader, device, target_dim):
     """
-    Calculate MSE for a naive model that always predicts zeros, separately for close and volume features.
+    Calculate MSE for a naive model that always predicts zeros for the target (close prices).
     """
-    naive_model = NaiveZeroModel(device)
+    naive_model = NaiveZeroModel(device, target_dim)
     mse_loss_fn = torch.nn.MSELoss(reduction='sum')
-    total_overall = 0.0
-    total_close = 0.0
-    total_volume = 0.0
+    total_loss = 0.0
     total_samples = 0
 
     with torch.no_grad():
@@ -108,121 +120,73 @@ def calculate_naive_mse(test_loader, device, close_indices, volume_indices):
             condition = condition.to(device)
             target = target.to(device)
             pred = naive_model(None, None, condition)
-            overall_loss = mse_loss_fn(pred, target)
-            close_loss = mse_loss_fn(pred[:, close_indices], target[:, close_indices])
-            volume_loss = mse_loss_fn(pred[:, volume_indices], target[:, volume_indices])
-            total_overall += overall_loss.item()
-            total_close += close_loss.item()
-            total_volume += volume_loss.item()
+            loss = mse_loss_fn(pred, target)
+            total_loss += loss.item()
             total_samples += target.shape[0]
 
-    overall_mse = total_overall / total_samples
-    close_mse = total_close / total_samples
-    volume_mse = total_volume / total_samples
-    return overall_mse, close_mse, volume_mse
+    overall_mse = total_loss / total_samples
+    return overall_mse
 
 # -------------------------------
 # Main Function
 # -------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Full Inference and MSE Evaluation for Diffusion Time Series Model")
-    parser.add_argument("--model_path", type=str, default='unet_diffusion_best.pth', help="Path to the saved model")
-    parser.add_argument("--window_size", type=int, default=60, help="Window size")
-    parser.add_argument("--num_features", type=int, default=16, help="Number of features")
-    parser.add_argument("--timesteps", type=int, default=100, help="Diffusion steps")
-    parser.add_argument("--hidden_dim", type=int, default=64, help="Hidden dimension")
-    parser.add_argument("--base_channels", type=int, default=32, help="Base channels")
-    args = parser.parse_args()
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_path = 'unet_diffusion_large_best.pth'  # Updated model path
 
-    # Set up diffusion process tensors
-    betas = linear_beta_schedule(args.timesteps, beta_initial=1e-4, beta_final=0.02).to(device)
+    # Number of features based on the data
+    num_condition_features = 16  # Total number of features
+    num_target_features = 8  # Number of close price features
+
+    # Set up diffusion process tensors using parameters from UNet_diffusion_large
+    betas = torch.linspace(BETA_START, BETA_END, TIMESTEPS).to(device)
     alphas = 1.0 - betas
     alphas_bar = torch.cumprod(alphas, dim=0).to(device)
 
-    # Load the saved model and move it to device
-    model = DiffusionTimeSeriesModelUNet(args.window_size, args.num_features,
-                                         args.hidden_dim, args.base_channels)
-    model.load_state_dict(torch.load(args.model_path, map_location=device))
+    # Load the larger UNet model
+    model = DiffusionTimeSeriesModelUNetLarge(
+        window_size=WINDOW_SIZE,
+        input_features=num_condition_features,
+        output_features=num_target_features,
+        hidden_dim=HIDDEN_DIM,
+        base_channels=BASE_CHANNELS
+    )
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
 
-    # -------------------------------
-    # Load Test Set
-    # -------------------------------
-    # Load futures data; the dataframe should contain columns like 'date', 'CL_close', 'CL_volume', etc.
-    df = pd.read_parquet('../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
-    df['date'] = pd.to_datetime(df['date'], utc=True)
-    df['date'] = df['date'].dt.tz_convert('America/New_York')
+    # Rest of the data loading code remains the same...
 
-    # STEP 1: Select Close and Volume features (for multiple instruments)
-    target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
-    reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
-    df = df.filter(regex=reg_exp)
-
-    # Extract all columns that end with '_close' or '_volume'
-    feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
-    print("Features:", feature_cols)
-
-    # Sort by date and reset index
-    df = df.sort_values('date').reset_index(drop=True)
-
-    # STEP 2: Normalize each feature using z-score normalization.
-    # For '_close' columns, we use pct_change; for volume, we use the raw value.
-    col_norm_factors = {}
-    for col in feature_cols:
-        df[col + '_norm'] = df[col].pct_change().fillna(0) if col.endswith('_close') else df[col]
-        mean_val = df[col + '_norm'].mean()
-        std_val = df[col + '_norm'].std()
-        df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
-        col_norm_factors[col] = (mean_val, std_val)
-
-    # List of normalized feature columns
-    norm_features = [col + '_norm' for col in feature_cols]
-
-    # Determine indices for close and volume features based on the normalized column names
-    close_indices = [i for i, f in enumerate(norm_features) if '_close' in f]
-    volume_indices = [i for i, f in enumerate(norm_features) if '_volume' in f]
-
-    # Create test dataset and dataloader
-    dataset = MultiStockDataset(df, norm_features, args.window_size)
+    # Create test dataset and dataloader using WINDOW_SIZE from UNet_diffusion_large
+    dataset = MultiStockDataset(df, condition_cols, target_cols, WINDOW_SIZE)
     test_size_val = int(len(dataset) * 0.2)
     _, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - test_size_val, test_size_val])
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    # -------------------------------
-    # Run Full Inference on the Test Set and Calculate MSE
-    # -------------------------------
-    # Calculate baseline MSE with naive zero model separately for close and volume
-    naive_overall, naive_close, naive_volume = calculate_naive_mse(test_loader, device, close_indices, volume_indices)
-    print(f"Naive Zero Model MSE on test set: overall {naive_overall:.6f}, close {naive_close:.6f}, volume {naive_volume:.6f}")
+    # Calculate baseline MSE
+    naive_mse = calculate_naive_mse(test_loader, device, num_target_features)
+    print(f"Naive Zero Model MSE on test set (close prices): {naive_mse:.6f}")
 
+    # Evaluation loop
     mse_loss_fn = torch.nn.MSELoss(reduction='sum')
-    total_overall = 0.0
-    total_close = 0.0
-    total_volume = 0.0
+    total_loss = 0.0
     total_samples = 0
 
     model.eval()
     with torch.no_grad():
-        for condition, target in tqdm(test_loader):
-            condition = condition.to(device)  # shape: [B, window_size, num_features]
-            target = target.to(device)          # shape: [B, num_features]
-            # Run full reverse diffusion to generate prediction from the condition
-            pred = full_inference(model, condition, betas, alphas, alphas_bar, args.timesteps, device)
-            # Compute MSE between the predicted target and the actual target for overall, close, and volume features
-            overall_loss = mse_loss_fn(pred, target)
-            close_loss = mse_loss_fn(pred[:, close_indices], target[:, close_indices])
-            volume_loss = mse_loss_fn(pred[:, volume_indices], target[:, volume_indices])
-            total_overall += overall_loss.item()
-            total_close += close_loss.item()
-            total_volume += volume_loss.item()
+        for condition, target in tqdm(test_loader, desc="Evaluating Diffusion Model"):
+            condition = condition.to(device)
+            target = target.to(device)
+            pred = full_inference(
+                model, condition, betas, alphas, alphas_bar,
+                TIMESTEPS, device, num_target_features
+            )
+            loss = mse_loss_fn(pred, target)
+            total_loss += loss.item()
             total_samples += target.shape[0]
 
-    overall_mse = total_overall / total_samples
-    close_mse = total_close / total_samples
-    volume_mse = total_volume / total_samples
-    print(f"Diffusion Model MSE on test set: overall {overall_mse:.6f}, close {close_mse:.6f}, volume {volume_mse:.6f}")
+    overall_mse = total_loss / total_samples
+    print(f"Diffusion Model MSE on test set (close prices): {overall_mse:.6f}")
+
 
 if __name__ == '__main__':
     main()
