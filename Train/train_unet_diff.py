@@ -114,8 +114,9 @@ def calculate_test_loss(model, test_loader, device, timesteps, alphas_bar, loss_
             noise_pred = model(noisy_target, t, condition)
             loss = loss_fn(noise_pred, noise)
             total_loss += loss.item() * batch_size
+            total_samples += batch_size
 
-    avg_loss = total_loss / len(test_loader)
+    avg_loss = total_loss / total_samples
     return avg_loss
 
 def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar, extract_fn):
@@ -234,7 +235,7 @@ class DiffusionTrainer:
 
                 epoch_loss += loss.item() * batch_size_current
 
-            epoch_loss /= len(train_loader)
+            epoch_loss /= len(train_dataset)
             test_loss = calculate_test_loss(model, test_loader, self.device,
                                             self.timesteps, alphas_bar, mse_criterion, extract)
             print(f"Epoch {epoch+1}/{self.epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")

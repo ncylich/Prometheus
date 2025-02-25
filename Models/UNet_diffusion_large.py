@@ -20,7 +20,7 @@ L1_WEIGHT = 1e-5
 L2_WEIGHT = 1e-5
 TIMESTEPS = 100
 BETA_START = 1e-4
-BETA_END = 0.02
+BETA_END = 0.1
 HIDDEN_DIM = 128
 BASE_CHANNELS = 32
 
@@ -79,6 +79,7 @@ class ConvBlock(nn.Module):
             nn.Dropout(dropout_rate),
             nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm1d(out_channels),
+            nn.SiLU(),
             nn.Dropout(dropout_rate)
         )
         self.condition_proj = nn.Linear(cond_dim, out_channels)
