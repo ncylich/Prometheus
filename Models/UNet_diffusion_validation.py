@@ -7,7 +7,7 @@ from tqdm import tqdm
 from UNet_diffusion_large import DiffusionTimeSeriesModelUNetLarge
 from Train.train_unet_diff import extract, DiffusionTrainer
 
-date = '02-25-2025'
+date = '02-26-2025'
 model_class = DiffusionTimeSeriesModelUNetLarge
 
 MODEL_PATH = f'{model_class.__name__}_best_{date}.pth'  # Updated model path
