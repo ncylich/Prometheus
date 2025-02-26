@@ -203,7 +203,8 @@ class DiffusionTrainer:
         l1_criterion = nn.L1Loss()
 
         date_string = datetime.datetime.now().strftime('%m-%d-%Y')
-        file = f'unet_diffusion_large_best_{date_string}.pth'
+        file = f'{type(model).__name__}_best_{date_string}.pth'
+        print(f"Training model, saving to {file}")
         best_loss = float('inf')
 
         # Training Loop

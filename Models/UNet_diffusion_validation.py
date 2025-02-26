@@ -17,6 +17,11 @@ from UNet_diffusion_large import (
 )
 from Train.train_unet_diff import extract
 
+date = '02-25-2025'
+model_class = DiffusionTimeSeriesModelUNetLarge
+
+MODEL_PATH = f'{model_class.__name__}_best_{date}.pth'  # Updated model path
+
 # -------------------------------
 # Set Random Seed for Reproducibility
 # -------------------------------
@@ -130,9 +135,8 @@ def calculate_naive_mse(test_loader, device, target_dim):
 # -------------------------------
 # Main Function
 # -------------------------------
-def main():
+def main(model_path=MODEL_PATH):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_path = 'unet_diffusion_large_best.pth'  # Updated model path
 
     # Number of features based on the data
     num_condition_features = 16  # Total number of features
@@ -144,7 +148,7 @@ def main():
     alphas_bar = torch.cumprod(alphas, dim=0).to(device)
 
     # Load the larger UNet model
-    model = DiffusionTimeSeriesModelUNetLarge(
+    model = model_class(
         window_size=WINDOW_SIZE,
         input_features=num_condition_features,
         output_features=num_target_features,
@@ -154,19 +158,54 @@ def main():
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
 
-    # Rest of the data loading code remains the same...
+    # -------------------------------
+    # Load Test Set
+    # -------------------------------
+    df = pd.read_parquet('../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
+    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df['date'] = df['date'].dt.tz_convert('America/New_York')
 
-    # Create test dataset and dataloader using WINDOW_SIZE from UNet_diffusion_large
+    # STEP 1: Select Close and Volume features (for multiple instruments)
+    target_tickers = ['NIY', 'NKD', 'CL', 'BZ', 'MES', 'ZN', 'MNQ', 'US']
+    reg_exp = '^(date|' + '|'.join(target_tickers) + ')'
+    df = df.filter(regex=reg_exp)
+
+    # Extract all columns that end with '_close' or '_volume'
+    feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
+    print("Features:", feature_cols)
+
+    # Sort by date and reset index
+    df = df.sort_values('date').reset_index(drop=True)
+
+    # STEP 2: Normalize each feature using z-score normalization.
+    # For '_close' columns, use pct_change; for volume, use raw values.
+    for col in feature_cols:
+        if col.endswith('_close'):
+            df[col + '_norm'] = df[col].pct_change().fillna(0)
+        else:
+            df[col + '_norm'] = df[col]
+        mean_val = df[col + '_norm'].mean()
+        std_val = df[col + '_norm'].std()
+        df[col + '_norm'] = (df[col + '_norm'] - mean_val) / std_val
+
+    # Define condition columns (all normalized features) and target columns (only close prices)
+    condition_cols = [col + '_norm' for col in feature_cols]
+    target_cols = [col + '_norm' for col in feature_cols if '_close' in col]
+
+    # Create test dataset and dataloader
     dataset = MultiStockDataset(df, condition_cols, target_cols, WINDOW_SIZE)
     test_size_val = int(len(dataset) * 0.2)
     _, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - test_size_val, test_size_val])
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    # Calculate baseline MSE
+    # -------------------------------
+    # Run Full Inference on the Test Set and Calculate MSE
+    # -------------------------------
+    # Calculate baseline MSE with naive zero model (for close prices)
     naive_mse = calculate_naive_mse(test_loader, device, num_target_features)
     print(f"Naive Zero Model MSE on test set (close prices): {naive_mse:.6f}")
 
-    # Evaluation loop
+    # Evaluation Loop
     mse_loss_fn = torch.nn.MSELoss(reduction='sum')
     total_loss = 0.0
     total_samples = 0
@@ -183,9 +222,10 @@ def main():
             loss = mse_loss_fn(pred, target)
             total_loss += loss.item()
             total_samples += target.shape[0]
+            print(f"Running MSE Loss: {total_loss / total_samples:.6f}")
 
     overall_mse = total_loss / total_samples
-    print(f"Diffusion Model MSE on test set (close prices): {overall_mse:.6f}")
+    print(f"\nFinal Diffusion Model MSE Loss on test set (close prices): {overall_mse:.6f}")
 
 
 if __name__ == '__main__':
