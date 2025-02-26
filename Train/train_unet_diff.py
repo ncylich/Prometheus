@@ -9,6 +9,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import sys
+import os
 import matplotlib.pyplot as plt
 
 
@@ -152,7 +153,8 @@ def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar
 # DiffusionTrainer Class: Handles Training & Evaluation
 # -------------------------------
 class DiffusionTrainer:
-    data_path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
+    data_path = os.path.join('drive/MyDrive' if 'google.colab' in sys.modules else '..',
+                             'Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
     def __init__(self, epochs, window_size, test_size, batch_size, lr, l1_weight, l2_weight,
                  timesteps, beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class):
         self.epochs = epochs
