@@ -7,7 +7,7 @@ from tqdm import tqdm
 from Models.UNet_diffusion_large import DiffusionTimeSeriesModelUNetLarge
 from Train.train_unet_diff import extract, DiffusionTrainer
 
-date = '02-26-2025'
+date = '02-25-2025'
 model_class = DiffusionTimeSeriesModelUNetLarge
 
 MODEL_PATH = f'{model_class.__name__}_best_{date}.pth'  # Updated model path
@@ -101,23 +101,55 @@ class NaiveZeroModel:
         # Predict zeros for target shape [B, target_dim]
         return torch.zeros(condition.shape[0], self.target_dim, device=self.device)
 
-def calculate_naive_mse(test_loader, device, target_dim):
+
+def evaluate_model(model, test_loader, device, full_diffusion=False, betas=None, alphas=None, alphas_bar=None,
+                   timesteps=None, output_features=None):
     """
-    Calculate MSE for a naive model that always predicts zeros for the target (close prices).
+    Evaluates a model on the test set and returns the MSE loss.
+    Args:
+        model: The model to evaluate (either diffusion model or naive model)
+        test_loader: DataLoader containing test data
+        device: torch device
+        full_diffusion: bool indicating if this is a diffusion model requiring full inference
+        betas, alphas, alphas_bar: diffusion process tensors (only needed if full_diffusion=True)
+        timesteps: number of diffusion timesteps (only needed if full_diffusion=True)
+        output_features: number of output features (only needed if full_diffusion=True)
+    Returns:
+        float: overall MSE loss
     """
-    naive_model = NaiveZeroModel(device, target_dim)
     mse_loss_fn = torch.nn.MSELoss()
     total_loss = 0.0
 
+    try:
+        model.eval()
+    except AttributeError:
+        pass
     with torch.no_grad():
-        for condition, target in tqdm(test_loader, desc='Naive Zero Model'):
+        loop = tqdm(enumerate(test_loader), desc="Evaluating Model") if full_diffusion else enumerate(test_loader)
+        for idx, (condition, target) in loop:
             condition = condition.to(device)
             target = target.to(device)
-            pred = naive_model(None, None, condition)
+
+            if full_diffusion:
+                pred = full_inference(model, condition, betas, alphas, alphas_bar,
+                                      timesteps, device, output_features)
+            else:
+                pred = model(None, None, condition)
+
             loss = mse_loss_fn(pred, target)
             total_loss += loss.item()
 
+            if full_diffusion:
+                print(f"Running MSE Loss: {total_loss / (idx + 1):.6f}")
+
     overall_mse = total_loss / len(test_loader)
+    return overall_mse
+
+
+def calculate_naive_mse(test_loader, device, target_dim):
+    """Calculate MSE for a naive model that always predicts zeros for the target."""
+    naive_model = NaiveZeroModel(device, target_dim)
+    overall_mse = evaluate_model(naive_model, test_loader, device, full_diffusion=False)
     return overall_mse
 
 # -------------------------------
@@ -184,26 +216,14 @@ def main(model_path=MODEL_PATH):
     naive_mse = calculate_naive_mse(test_loader, device, hparams['output_features'])
     print(f"Naive Zero Model MSE on test set (close prices): {naive_mse:.6f}")
 
-    # Evaluation Loop
-    mse_loss_fn = torch.nn.MSELoss()
-    total_loss = 0.0
-
-    model.eval()
-    with torch.no_grad():
-        for idx, (condition, target) in tqdm(enumerate(test_loader), desc="Evaluating Diffusion Model"):
-            condition = condition.to(device)
-            target = target.to(device)
-            pred = full_inference(
-                model, condition, betas, alphas, alphas_bar,
-                hparams['time_steps'], device, hparams['output_features']
-            )
-            loss = mse_loss_fn(pred, target)
-            total_loss += loss.item()
-            print(f"Running MSE Loss: {total_loss / (idx + 1):.6f}")
-
-    overall_mse = total_loss / len(test_loader)
-    print(f"\nFinal Diffusion Model MSE Loss on test set (close prices): {overall_mse:.6f}")
-
+    overall_mse = evaluate_model(model, test_loader, device,
+                                 full_diffusion=True,
+                                 betas=betas,
+                                 alphas=alphas,
+                                 alphas_bar=alphas_bar,
+                                 timesteps=hparams['time_steps'],
+                                 output_features=hparams['output_features'])
+    print(f"\nFinal Diffusion Model MSE Loss on test set: {overall_mse:.6f}")
 
 if __name__ == '__main__':
     main()
