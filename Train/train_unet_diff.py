@@ -48,9 +48,10 @@ class MultiStockDataset(Dataset):
 # Naive Zero Model (for Testing)
 # -------------------------------
 class NaiveZeroModel(nn.Module):
-    def __init__(self, target_dim=0):
+    def __init__(self, *args, target_dim=0, **kwargs):
         super().__init__()
         self.target_dim = target_dim
+        self._ = nn.Linear(1, 1)  # Dummy layer
 
     def forward(self, x, t, condition):
         if self.target_dim > 0:
