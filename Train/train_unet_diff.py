@@ -244,7 +244,7 @@ class DiffusionTrainer:
     data_path = os.path.join('drive/MyDrive' if 'google.colab' in sys.modules else '..',
                              'Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
     def __init__(self, epochs, window_size, test_size, batch_size, lr, l1_weight, l2_weight, timesteps,
-                 beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class, test_full_inf=False):
+                 beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class, test_full_inf=True):
         self.epochs = epochs
         self.window_size = window_size
         self.test_size = test_size
