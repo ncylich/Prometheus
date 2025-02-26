@@ -48,11 +48,13 @@ class MultiStockDataset(Dataset):
 # Naive Zero Model (for Testing)
 # -------------------------------
 class NaiveZeroModel(nn.Module):
-    def __init__(self, output_features):
+    def __init__(self, target_dim=0):
         super().__init__()
-        self.output_features = output_features
+        self.target_dim = target_dim
 
     def forward(self, x, t, condition):
+        if self.target_dim > 0:
+            return torch.zeros(condition.shape[0], self.target_dim)
         return torch.zeros_like(x)
 
 
@@ -148,13 +150,101 @@ def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar
     plt.show()
 
 # -------------------------------
+# Full Reverse Diffusion Inference Function
+# -------------------------------
+def full_inference(model, condition, betas, alphas, alphas_bar, timesteps, device, num_target_features):
+    """
+    Runs full reverse diffusion starting from pure noise.
+    Inputs:
+      - model: the diffusion model.
+      - condition: historical window tensor of shape [B, window_size, num_condition_features].
+      - betas, alphas, alphas_bar: diffusion process tensors.
+      - timesteps: total number of diffusion steps.
+      - device: torch device.
+      - num_target_features: number of target features (close prices only).
+    Returns:
+      - x: final denoised sample tensor of shape [B, num_target_features].
+    """
+    model.eval()
+    batch_size = condition.shape[0]
+    x = torch.randn(batch_size, num_target_features, device=device)
+
+    with torch.no_grad():
+        for t in reversed(range(1, timesteps)):
+            t_tensor = torch.full((batch_size,), t, device=device, dtype=torch.long)
+            a_bar_t = extract(alphas_bar, t_tensor, x.shape)
+            noise_pred = model(x, t_tensor, condition)
+            x0_pred = (x - torch.sqrt(1 - a_bar_t) * noise_pred) / torch.sqrt(a_bar_t)
+
+            t_prev = t - 1
+            t_prev_tensor = torch.full((batch_size,), t_prev, device=device, dtype=torch.long)
+            a_bar_prev = extract(alphas_bar, t_prev_tensor, x.shape)
+
+            noise = torch.randn_like(x) if t_prev > 0 else 0.0
+            x = torch.sqrt(a_bar_prev) * x0_pred + torch.sqrt(1 - a_bar_prev) * noise
+
+        # Final step at t=0
+        t_tensor = torch.zeros(batch_size, device=device, dtype=torch.long)
+        a_bar_0 = extract(alphas_bar, t_tensor, x.shape)
+        noise_pred = model(x, t_tensor, condition)
+        x = (x - torch.sqrt(1 - a_bar_0) * noise_pred) / torch.sqrt(a_bar_0)
+
+    return x
+
+def evaluate_model(model, test_loader, device, full_diffusion=False, betas=None, alphas=None, alphas_bar=None,
+                   timesteps=None, output_features=None):
+    """
+    Evaluates a model on the test set and returns the MSE loss.
+    Args:
+        model: The model to evaluate (either diffusion model or naive model)
+        test_loader: DataLoader containing test data
+        device: torch device
+        full_diffusion: bool indicating if this is a diffusion model requiring full inference
+        betas, alphas, alphas_bar: diffusion process tensors (only needed if full_diffusion=True)
+        timesteps: number of diffusion timesteps (only needed if full_diffusion=True)
+        output_features: number of output features (only needed if full_diffusion=True)
+    Returns:
+        float: overall MSE loss
+    """
+    mse_loss_fn = torch.nn.MSELoss()
+    total_loss = 0.0
+
+    try:
+        model.eval()
+    except AttributeError:
+        pass
+    with torch.no_grad():
+        loop = tqdm(enumerate(test_loader), desc="Evaluating Model") if full_diffusion else enumerate(test_loader)
+        for idx, (condition, target) in loop:
+            condition = condition.to(device)
+            target = target.to(device)
+
+            if full_diffusion:
+                pred = full_inference(model, condition, betas, alphas, alphas_bar,
+                                      timesteps, device, output_features)
+            else:
+                pred = model(None, None, condition)
+
+            loss = mse_loss_fn(pred, target)
+            total_loss += loss.item()
+
+    overall_mse = total_loss / len(test_loader)
+    return overall_mse
+
+def calculate_naive_mse(test_loader, device, target_dim):
+    """Calculate MSE for a naive model that always predicts zeros for the target."""
+    naive_model = NaiveZeroModel(target_dim=target_dim).to(device)
+    overall_mse = evaluate_model(naive_model, test_loader, device, full_diffusion=False)
+    return overall_mse
+
+# -------------------------------
 # DiffusionTrainer Class: Handles Training & Evaluation
 # -------------------------------
 class DiffusionTrainer:
     data_path = os.path.join('drive/MyDrive' if 'google.colab' in sys.modules else '..',
                              'Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
-    def __init__(self, epochs, window_size, test_size, batch_size, lr, l1_weight, l2_weight,
-                 timesteps, beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class):
+    def __init__(self, epochs, window_size, test_size, batch_size, lr, l1_weight, l2_weight, timesteps,
+                 beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class, test_full_inf=False):
         self.epochs = epochs
         self.window_size = window_size
         self.test_size = test_size
@@ -169,6 +259,7 @@ class DiffusionTrainer:
         self.base_channels = base_channels
         self.dropout_rate = dropout_rate
         self.model_class = model_class
+        self.test_full_inference = test_full_inf
         self.dataset, self.input_features, self.output_features = load_data(self.data_path, self.window_size)
 
         # Setup device
@@ -238,13 +329,18 @@ class DiffusionTrainer:
         date_string = datetime.datetime.now().strftime('%m-%d-%Y')
         file = f'{type(model).__name__}_best_{date_string}.pth'
         print(f"Training model, saving to {file}")
-        best_loss = float('inf')
+
+        if self.test_full_inference:
+            naive_mse = calculate_naive_mse(test_loader, self.device, self.output_features)
+            print(f"Naive Zero Model MSE on test set (close prices): {naive_mse:.6f}")
 
         # Training Loop
-        for epoch in range(self.epochs):
+        best_loss = float('inf')
+        for epoch_idx in range(self.epochs):
+            epoch = epoch_idx + 1
             model.train()
             epoch_loss = 0.0
-            for condition, target in tqdm(train_loader, desc=f"Epoch {epoch+1}/{self.epochs}"):
+            for condition, target in tqdm(train_loader, desc=f"Epoch {epoch}/{self.epochs}"):
                 condition = condition.to(self.device)
                 target = target.to(self.device)
                 batch_size_current = target.shape[0]
@@ -272,11 +368,20 @@ class DiffusionTrainer:
             epoch_loss /= len(train_loader)
             test_loss = calculate_test_loss(model, test_loader, self.device,
                                             self.timesteps, alphas_bar, mse_criterion, extract)
-            print(f"Epoch {epoch+1}/{self.epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")
-
+            print(f"Epoch {epoch}/{self.epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")
             if test_loss < best_loss:
                 best_loss = test_loss
                 self.save_checkpoint(model, file)
+
+            if self.test_full_inference and (epoch % 10 == 0 or epoch == self.epochs):
+                overall_mse = evaluate_model(model, test_loader, self.device,
+                                             full_diffusion=True,
+                                             betas=betas,
+                                             alphas=alphas,
+                                             alphas_bar=alphas_bar,
+                                             timesteps=self.timesteps,
+                                             output_features=self.output_features)
+                print(f"Overall MSE on test set (close prices): {overall_mse:.6f}")
 
         print("Training complete!")
         print("Best Test Loss (Price): {:.4f}".format(best_loss))
