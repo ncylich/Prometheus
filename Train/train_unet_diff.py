@@ -60,8 +60,6 @@ class NaiveZeroModel(nn.Module):
 # Data Loading and Preprocessing
 # -------------------------------
 def load_data(path, window_size):
-    if 'google.colab' in sys.modules:
-        path = 'drive/MyDrive' + path[2:]
     df = pd.read_parquet(path)
     df['date'] = pd.to_datetime(df['date'], utc=True)
     df['date'] = df['date'].dt.tz_convert('America/New_York')
