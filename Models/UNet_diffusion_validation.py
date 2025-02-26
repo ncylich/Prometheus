@@ -106,9 +106,8 @@ def calculate_naive_mse(test_loader, device, target_dim):
     Calculate MSE for a naive model that always predicts zeros for the target (close prices).
     """
     naive_model = NaiveZeroModel(device, target_dim)
-    mse_loss_fn = torch.nn.MSELoss(reduction='sum')
+    mse_loss_fn = torch.nn.MSELoss()
     total_loss = 0.0
-    total_samples = 0
 
     with torch.no_grad():
         for condition, target in tqdm(test_loader, desc='Naive Zero Model'):
@@ -117,9 +116,8 @@ def calculate_naive_mse(test_loader, device, target_dim):
             pred = naive_model(None, None, condition)
             loss = mse_loss_fn(pred, target)
             total_loss += loss.item()
-            total_samples += target.shape[0]
 
-    overall_mse = total_loss / total_samples
+    overall_mse = total_loss / len(test_loader)
     return overall_mse
 
 # -------------------------------
