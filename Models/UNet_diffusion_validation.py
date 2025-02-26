@@ -128,7 +128,7 @@ def calculate_naive_mse(test_loader, device, target_dim):
 def main(model_path=MODEL_PATH):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Load the larger UNet model
-    model, hparams = DiffusionTrainer.load_checkpoint(MODEL_PATH, device)
+    model, hparams = DiffusionTrainer.load_checkpoint(model_path, device)
     model.to(device)
 
     # Set up diffusion process tensors using parameters from UNet_diffusion_large
