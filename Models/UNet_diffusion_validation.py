@@ -4,18 +4,8 @@ import pandas as pd
 import random
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from UNet_diffusion_large import (
-    DiffusionTimeSeriesModelUNetLarge,
-    WINDOW_SIZE,
-    HIDDEN_DIM,
-    BASE_CHANNELS,
-    TIMESTEPS,
-    BETA_START,
-    BETA_END,
-    BATCH_SIZE,
-    DROPOUT_RATE
-)
-from Train.train_unet_diff import extract
+from UNet_diffusion_large import DiffusionTimeSeriesModelUNetLarge
+from Train.train_unet_diff import extract, DiffusionTrainer
 
 date = '02-25-2025'
 model_class = DiffusionTimeSeriesModelUNetLarge
@@ -137,31 +127,21 @@ def calculate_naive_mse(test_loader, device, target_dim):
 # -------------------------------
 def main(model_path=MODEL_PATH):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    # Number of features based on the data
-    num_condition_features = 16  # Total number of features
-    num_target_features = 8  # Number of close price features
+    # Load the larger UNet model
+    model, hparams = DiffusionTrainer.load_checkpoint(MODEL_PATH, device)
+    model.to(device)
 
     # Set up diffusion process tensors using parameters from UNet_diffusion_large
-    betas = torch.linspace(BETA_START, BETA_END, TIMESTEPS).to(device)
+    betas = torch.linspace(hparams['beta_start'], hparams['beta_end'],
+                           hparams['time_steps']).to(device)
     alphas = 1.0 - betas
     alphas_bar = torch.cumprod(alphas, dim=0).to(device)
 
-    # Load the larger UNet model
-    model = model_class(
-        window_size=WINDOW_SIZE,
-        input_features=num_condition_features,
-        output_features=num_target_features,
-        hidden_dim=HIDDEN_DIM,
-        base_channels=BASE_CHANNELS
-    )
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.to(device)
 
     # -------------------------------
     # Load Test Set
     # -------------------------------
-    df = pd.read_parquet('../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet')
+    df = pd.read_parquet(DiffusionTrainer.data_path)
     df['date'] = pd.to_datetime(df['date'], utc=True)
     df['date'] = df['date'].dt.tz_convert('America/New_York')
 
@@ -193,38 +173,37 @@ def main(model_path=MODEL_PATH):
     target_cols = [col + '_norm' for col in feature_cols if '_close' in col]
 
     # Create test dataset and dataloader
-    dataset = MultiStockDataset(df, condition_cols, target_cols, WINDOW_SIZE)
+    dataset = MultiStockDataset(df, condition_cols, target_cols, hparams['window_size'])
     test_size_val = int(len(dataset) * 0.2)
-    _, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - test_size_val, test_size_val])
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    _, test_dataset = torch.utils.data.random_split(dataset,
+                                                    [len(dataset) - test_size_val, test_size_val])
+    test_loader = DataLoader(test_dataset, batch_size=hparams['batch_size'], shuffle=False)
 
     # -------------------------------
     # Run Full Inference on the Test Set and Calculate MSE
     # -------------------------------
     # Calculate baseline MSE with naive zero model (for close prices)
-    naive_mse = calculate_naive_mse(test_loader, device, num_target_features)
+    naive_mse = calculate_naive_mse(test_loader, device, hparams['output_features'])
     print(f"Naive Zero Model MSE on test set (close prices): {naive_mse:.6f}")
 
     # Evaluation Loop
-    mse_loss_fn = torch.nn.MSELoss(reduction='sum')
+    mse_loss_fn = torch.nn.MSELoss()
     total_loss = 0.0
-    total_samples = 0
 
     model.eval()
     with torch.no_grad():
-        for condition, target in tqdm(test_loader, desc="Evaluating Diffusion Model"):
+        for idx, (condition, target) in tqdm(enumerate(test_loader), desc="Evaluating Diffusion Model"):
             condition = condition.to(device)
             target = target.to(device)
             pred = full_inference(
                 model, condition, betas, alphas, alphas_bar,
-                TIMESTEPS, device, num_target_features
+                hparams['time_steps'], device, hparams['output_features']
             )
             loss = mse_loss_fn(pred, target)
             total_loss += loss.item()
-            total_samples += target.shape[0]
-            print(f"Running MSE Loss: {total_loss / total_samples:.6f}")
+            print(f"Running MSE Loss: {total_loss / (idx + 1):.6f}")
 
-    overall_mse = total_loss / total_samples
+    overall_mse = total_loss / len(test_loader)
     print(f"\nFinal Diffusion Model MSE Loss on test set (close prices): {overall_mse:.6f}")
 
 

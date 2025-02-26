@@ -100,7 +100,6 @@ def load_data(path, window_size):
 def calculate_test_loss(model, test_loader, device, timesteps, alphas_bar, loss_fn, extract_fn):
     model.eval()
     total_loss = 0
-    total_samples = 0
 
     with torch.no_grad():
         for condition, target in tqdm(test_loader, desc="Testing"):
@@ -113,10 +112,9 @@ def calculate_test_loss(model, test_loader, device, timesteps, alphas_bar, loss_
             noisy_target = torch.sqrt(a_bar) * target + torch.sqrt(1 - a_bar) * noise
             noise_pred = model(noisy_target, t, condition)
             loss = loss_fn(noise_pred, noise)
-            total_loss += loss.item() * batch_size
-            total_samples += batch_size
+            total_loss += loss.item()
 
-    avg_loss = total_loss / total_samples
+    avg_loss = total_loss / len(test_loader)
     return avg_loss
 
 def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar, extract_fn):
@@ -154,6 +152,7 @@ def validate_one_timestep(model_unet, test_loader, device, timesteps, alphas_bar
 # DiffusionTrainer Class: Handles Training & Evaluation
 # -------------------------------
 class DiffusionTrainer:
+    data_path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
     def __init__(self, epochs, window_size, test_size, batch_size, lr, l1_weight, l2_weight,
                  timesteps, beta_start, beta_end, hidden_dim, base_channels, dropout_rate, model_class):
         self.epochs = epochs
@@ -170,17 +169,51 @@ class DiffusionTrainer:
         self.base_channels = base_channels
         self.dropout_rate = dropout_rate
         self.model_class = model_class
+        self.dataset, self.input_features, self.output_features = load_data(self.data_path, self.window_size)
 
         # Setup device
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    def save_checkpoint(self, model, filename):
+        checkpoint = {
+            'model_state_dict': model.state_dict(),
+            'model_class': model.__class__,
+            'hparams': {
+                'window_size': self.window_size,
+                'input_features': self.input_features,
+                'output_features': self.output_features,
+                'hidden_dim': self.hidden_dim,
+                'base_channels': self.base_channels,
+                'dropout_rate': self.dropout_rate,
+                'time_steps': self.timesteps,
+                'beta_start': self.beta_start,
+                'beta_end': self.beta_end,
+                'batch_size': self.batch_size
+            }
+        }
+        torch.save(checkpoint, filename)
+
+    @staticmethod
+    def load_checkpoint(filepath, device):
+        checkpoint = torch.load(filepath, map_location=device)
+        model_class = checkpoint['model_class']
+        hparams = checkpoint['hparams']
+
+        model = model_class(
+            window_size=hparams['window_size'],
+            input_features=hparams['input_features'],
+            output_features=hparams['output_features'],
+            hidden_dim=hparams['hidden_dim'],
+            base_channels=hparams['base_channels']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        return model, hparams
+
     def run_training(self):
         # Data Loading and Preprocessing
-        path = '../Local_Data/focused_futures_30min/interpolated_all_long_term_combo.parquet'
-        dataset, input_features, output_features = load_data(path, self.window_size)
-        train_size_val = int(len(dataset) * (1 - self.test_size))
-        test_size_val = len(dataset) - train_size_val
-        train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size_val, test_size_val])
+        train_size_val = int(len(self.dataset) * (1 - self.test_size))
+        test_size_val = len(self.dataset) - train_size_val
+        train_dataset, test_dataset = torch.utils.data.random_split(self.dataset, [train_size_val, test_size_val])
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
 
@@ -192,7 +225,7 @@ class DiffusionTrainer:
         alphas_bar = alphas_bar.to(self.device)
 
         # Model, Optimizer, and Loss Setup
-        model = self.model_class(self.window_size, input_features, output_features,
+        model = self.model_class(self.window_size, self.input_features, self.output_features,
                                  hidden_dim=self.hidden_dim, base_channels=self.base_channels)
         model.to(self.device)
 
@@ -234,16 +267,16 @@ class DiffusionTrainer:
                 optimizer.step()
                 scheduler.step()
 
-                epoch_loss += loss.item() * batch_size_current
+                epoch_loss += loss.item()
 
-            epoch_loss /= len(train_dataset)
+            epoch_loss /= len(train_loader)
             test_loss = calculate_test_loss(model, test_loader, self.device,
                                             self.timesteps, alphas_bar, mse_criterion, extract)
             print(f"Epoch {epoch+1}/{self.epochs}, Train Loss: {epoch_loss:.4f}, Test Loss: {test_loss:.4f}")
 
             if test_loss < best_loss:
                 best_loss = test_loss
-                torch.save(model.state_dict(), file)
+                self.save_checkpoint(model, file)
 
         print("Training complete!")
         print("Best Test Loss (Price): {:.4f}".format(best_loss))
@@ -266,3 +299,4 @@ if __name__ == '__main__':
         dropout_rate=0.2,
         model_class=NaiveZeroModel  # This can be set to a dummy or omitted when running trainer directly.
     )
+    trainer.run_training()
