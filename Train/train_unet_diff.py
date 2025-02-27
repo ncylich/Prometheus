@@ -54,9 +54,10 @@ class NaiveZeroModel(nn.Module):
         self._ = nn.Linear(1, 1)  # Dummy layer
 
     def forward(self, x, t, condition):
+        device = condition.device
         if self.target_dim > 0:
-            return torch.zeros(condition.shape[0], self.target_dim)
-        return torch.zeros_like(x)
+            return torch.zeros(condition.shape[0], self.target_dim, device=device)
+        return torch.zeros_like(x, device=device)
 
 
 # -------------------------------
@@ -264,7 +265,7 @@ class DiffusionTrainer:
         self.dataset, self.input_features, self.output_features = load_data(self.data_path, self.window_size)
 
         # Setup device
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backend.mps.is_available() else 'cpu')
 
     def save_checkpoint(self, model, filename):
         checkpoint = {
