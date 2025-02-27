@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
-from security_relationship_analysis import multivariate_regression, plot_2d_graph, r_squared
-from multivar_r2_reduction import test_multivariate_regression
+try:
+    from DataCollection.security_relationship_analysis import multivariate_regression, plot_2d_graph, r_squared
+    from DataCollection.multivar_r2_reduction import test_multivariate_regression
+except:
+    pass
+
 
 def aggregate_to_daily(df):
     df = df.copy()

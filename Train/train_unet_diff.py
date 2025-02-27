@@ -11,6 +11,7 @@ from tqdm import tqdm
 import sys
 import os
 import matplotlib.pyplot as plt
+from DataCollection.technical_indicators import calculate_rsi_for_tickers, calculate_stochastic_for_tickers, calculate_macd_for_tickers
 
 
 # -------------------------------
@@ -73,9 +74,22 @@ def load_data(path, window_size):
     df = df.filter(regex=reg_exp)
 
     feature_cols = df.filter(regex='(_close|_volume)$').columns.tolist()
+    df = df[['date'] + feature_cols]
     print("Features:", feature_cols)
 
     df = df.sort_values('date').reset_index(drop=True)
+
+    df = calculate_rsi_for_tickers(df, period=14)
+    df = calculate_stochastic_for_tickers(df, k_period=14, d_period=3)
+    df = calculate_macd_for_tickers(df, fast_period=12, slow_period=26, signal_period=9)
+    df = df.dropna()
+
+    new_cols = [col for col in df.columns if col not in feature_cols and col != 'date']
+    for col in new_cols:
+        ticker = col.split('_')[0]
+        df[col] = df[col] / df[f'{ticker}_close']
+
+    feature_cols = df.columns[1:].tolist()  # Exclude 'date' column
 
     # Normalize features (using z-score normalization; for close features use pct_change)
     col_norm_factors = {}
@@ -92,6 +106,9 @@ def load_data(path, window_size):
     norm_features = [col + '_norm' for col in feature_cols]
     condition_cols = norm_features
     target_cols = [col for col in norm_features if '_close_norm' in col]
+
+    df = df[['date'] + condition_cols]
+    df = df.copy()  # Defragmenting the dataframe
 
     dataset = MultiStockDataset(df, condition_cols, target_cols, window_size)
     # Return dataset and also the number of condition and target features
@@ -265,7 +282,7 @@ class DiffusionTrainer:
         self.dataset, self.input_features, self.output_features = load_data(self.data_path, self.window_size)
 
         # Setup device
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backend.mps.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def save_checkpoint(self, model, filename):
         checkpoint = {
