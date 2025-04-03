@@ -7,8 +7,8 @@ import time
 
 # Import the sentiment analysis function
 # Assuming this function is defined in another file like sentiment_model.py
-# from sentiment_model import get_score
-def get_score(text):
+# from sentiment_model import get_scores
+def get_scores(texts):
     raise NotImplementedError("Sentiment analysis function not implemented. Please define it.")
 
 def get_crude_oil_titles(date_str):
@@ -76,8 +76,8 @@ def main():
         titles = get_crude_oil_titles(date_str)
 
         if titles:
-            # Calculate sentiment score for each title
-            sentiment_scores = [get_score(title) for title in titles]
+            # Calculate sentiment scores for all titles in batch
+            sentiment_scores = get_scores(titles)
 
             # Calculate average sentiment
             avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
