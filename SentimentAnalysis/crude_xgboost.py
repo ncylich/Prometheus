@@ -1,3 +1,11 @@
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 '''
 Purpose: Crude Oil Price Prediction using XGBoost and Sentiment Analysis using Crude Bert
 Large Input Features
@@ -73,6 +81,8 @@ def feature_preprocessing(df, sentiment_df):
     twenty_avg_sent = sentiment_df.rolling(window=20).mean()
 
     # Combine all features into the DataFrame
+    df['future_price'] = df['close'].shift(-1)
+
     df['5D_Momentum'] = five_momentum
     df['20D_Momentum'] = twenty_momentum
     df['5D_Moving_Average'] = five_moving_average
@@ -97,3 +107,155 @@ def feature_preprocessing(df, sentiment_df):
     df = df.reset_index(drop=True)
 
     return df
+
+
+def create_and_train_model(df):
+    """
+    Create, train, and evaluate an XGBoost model for predicting future oil prices.
+
+    Parameters:
+        df (pd.DataFrame): Processed dataframe with features and target
+
+    Returns:
+        tuple: (trained model, evaluation metrics, feature importance)
+    """
+    # Ensure date is not used as a feature if present
+    features_df = df.copy()
+    if 'date' in features_df.columns:
+        features_df = features_df.set_index('date')
+
+    # Separate features and target
+    X = features_df.drop('future_price', axis=1)
+    y = features_df['future_price']
+
+    # Split data chronologically (last 20% for testing)
+    train_size = int(len(df) * 0.8)
+    X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
+    y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+
+    print(f"Training data: {X_train.shape}")
+    print(f"Testing data: {X_test.shape}")
+
+    # Initialize and train XGBoost model
+    model = xgb.XGBRegressor(
+        objective='reg:squarederror',
+        learning_rate=0.05,
+        max_depth=6,
+        n_estimators=200,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42
+    )
+
+    model.fit(
+        X_train, y_train,
+        eval_set=[(X_train, y_train), (X_test, y_test)],
+        eval_metric='rmse',
+        early_stopping_rounds=20,
+        verbose=100
+    )
+
+    # Make predictions
+    y_pred = model.predict(X_test)
+
+    # Evaluate model performance
+    metrics = {
+        'mse': mean_squared_error(y_test, y_pred),
+        'rmse': np.sqrt(mean_squared_error(y_test, y_pred)),
+        'mae': mean_absolute_error(y_test, y_pred),
+        'r2': r2_score(y_test, y_pred)
+    }
+
+    # Get feature importance
+    feature_importance = pd.DataFrame({
+        'Feature': X_train.columns,
+        'Importance': model.feature_importances_
+    }).sort_values(by='Importance', ascending=False)
+
+    # Calculate direction prediction accuracy
+    if 'close' in X_test.columns:
+        actual_direction = np.sign(y_test - X_test['close'])
+        predicted_direction = np.sign(y_pred - X_test['close'].values)
+        metrics['direction_accuracy'] = np.mean(actual_direction == predicted_direction)
+
+    # Print results
+    print("\nModel Performance:")
+    print(f"MSE: {metrics['mse']:.4f}")
+    print(f"RMSE: {metrics['rmse']:.4f}")
+    print(f"MAE: {metrics['mae']:.4f}")
+    print(f"R²: {metrics['r2']:.4f}")
+
+    if 'direction_accuracy' in metrics:
+        print(f"Direction Accuracy: {metrics['direction_accuracy']:.4f}")
+
+    print("\nTop 10 Most Important Features:")
+    print(feature_importance.head(10))
+
+    # Visualize results
+    visualize_results(y_test, y_pred, feature_importance)
+
+    return model, metrics, feature_importance
+
+
+def visualize_results(y_test, y_pred, feature_importance):
+    """
+    Visualize model predictions and feature importance.
+    """
+    # Set up figure
+    fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+
+    # Plot actual vs predicted values
+    axes[0].plot(y_test.values, label='Actual', color='blue', alpha=0.7)
+    axes[0].plot(y_pred, label='Predicted', color='red', alpha=0.7)
+    axes[0].set_title('Crude Oil Price: Actual vs Predicted')
+    axes[0].set_xlabel('Test Sample Index')
+    axes[0].set_ylabel('Price')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    # Plot feature importance
+    top_n = min(10, len(feature_importance))
+    sns.barplot(
+        x='Importance',
+        y='Feature',
+        data=feature_importance.head(top_n),
+        palette='viridis',
+        ax=axes[1]
+    )
+    axes[1].set_title('Top 10 Feature Importance')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Create scatter plot
+    plt.figure(figsize=(8, 8))
+    plt.scatter(y_test, y_pred, alpha=0.5)
+    plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+    plt.xlabel('Actual Price')
+    plt.ylabel('Predicted Price')
+    plt.title('Actual vs Predicted Price')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+def run_xgboost_pipeline(df, sentiment_df):
+    """
+    Run the complete XGBoost pipeline for crude oil price prediction.
+    """
+    # Process data and add features
+    processed_df = feature_preprocessing(df, sentiment_df)
+
+    # Create, train and test XGBoost model
+    model, metrics, feature_importance = create_and_train_model(processed_df)
+
+    return model, processed_df, metrics
+
+
+def main():
+    price_data = pd.read_csv('../Local_Data/futures_full_30min_contin_UNadj_11assu1/CL_full_30min_continuous_UNadjusted.csv')
+    sentiment_data = pd.read_csv('../Local_Data/crude_sentiments.csv')
+    model, processed_df, metrics = run_xgboost_pipeline(price_data, sentiment_data)
+
+if __name__ == '__main__':
+    main()
