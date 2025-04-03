@@ -7,9 +7,7 @@ import time
 
 # Import the sentiment analysis function
 # Assuming this function is defined in another file like sentiment_model.py
-# from sentiment_model import get_scores
-def get_scores(texts):
-    raise NotImplementedError("Sentiment analysis function not implemented. Please define it.")
+from crudebert import predict_scores
 
 def get_crude_oil_titles(date_str):
     """
@@ -29,21 +27,19 @@ def get_crude_oil_titles(date_str):
 
     # Create filters for crude oil related news
     f = Filters(
-        keyword=["crude oil", "oil price", "petroleum", "WTI", "Brent"],
+        # keyword=["crude oil", "oil price", "petroleum", "WTI", "Brent"],
+        keyword="crude oil",
         start_date=date_str,
-        end_date=next_day
+        end_date=next_day,
+        num_records=250  # Max number of records allowed in one query,
+        # country="US",  # Uncomment if you want to filter by country
     )
 
+    # TODO: Adaptively constrain and loop filters such that all articles are fetched (not just the first 250)
     try:
         # Query GDELT
         articles = gdelt.article_search(f)
-
-        # Extract titles
-        titles = []
-        if articles and 'articles' in articles:
-            titles = [article['title'] for article in articles['articles']
-                    if 'title' in article]
-
+        titles = articles['title'].tolist()
         return titles
     except Exception as e:
         print(f"Error querying GDELT for {date_str}: {str(e)}")
@@ -77,7 +73,7 @@ def main():
 
         if titles:
             # Calculate sentiment scores for all titles in batch
-            sentiment_scores = get_scores(titles)
+            sentiment_scores = predict_scores(titles)
 
             # Calculate average sentiment
             avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)

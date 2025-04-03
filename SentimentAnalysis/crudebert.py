@@ -31,7 +31,7 @@ headlines = [
 example_headlines = pd.DataFrame(headlines, columns=["Headline"])
 
 config_path = './crude_bert_config.json'
-model_path = '../Train/crude_bert_model.bin'
+model_path = '../Local_Data/crude_bert_model.bin'
 
 # Load the configuration
 config = AutoConfig.from_pretrained(config_path)
@@ -92,4 +92,5 @@ def predict_scores(texts):
         scores.append(pred_label_id)
     return scores
 
-print(predict_scores(headlines))
+if __name__ == "__main__":
+    print(predict_scores(headlines))
