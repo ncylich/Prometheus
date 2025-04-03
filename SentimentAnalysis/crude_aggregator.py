@@ -1,0 +1,113 @@
+import pandas as pd
+import datetime
+from gdeltdoc import GdeltDoc, Filters
+import os
+from tqdm import tqdm
+import time
+
+# Import the sentiment analysis function
+# Assuming this function is defined in another file like sentiment_model.py
+# from sentiment_model import get_score
+def get_score(text):
+    raise NotImplementedError("Sentiment analysis function not implemented. Please define it.")
+
+def get_crude_oil_titles(date_str):
+    """
+    Query GDELT for news titles related to crude oil on a specific date
+
+    Args:
+        date_str (str): Date in format 'YYYY-MM-DD'
+
+    Returns:
+        list: List of news titles related to crude oil
+    """
+    gdelt = GdeltDoc()
+
+    # Parse date and create date range (single day)
+    date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+    next_day = (date_obj + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+
+    # Create filters for crude oil related news
+    f = Filters(
+        keyword=["crude oil", "oil price", "petroleum", "WTI", "Brent"],
+        start_date=date_str,
+        end_date=next_day
+    )
+
+    try:
+        # Query GDELT
+        articles = gdelt.article_search(f)
+
+        # Extract titles
+        titles = []
+        if articles and 'articles' in articles:
+            titles = [article['title'] for article in articles['articles']
+                    if 'title' in article]
+
+        return titles
+    except Exception as e:
+        print(f"Error querying GDELT for {date_str}: {str(e)}")
+        return []
+
+def main():
+    # Read crude oil data
+    input_path = '../Local_Data/futures_full_30min_contin_UNadj_11assu1/CL_full_30min_continuous_UNadjusted.csv'
+    output_path = '../Local_Data/crude_sentiments.csv'
+
+    print(f"Reading crude oil data from {input_path}")
+    crude_data = pd.read_csv(input_path)
+
+    # Convert date column to datetime
+    crude_data['date'] = pd.to_datetime(crude_data['date'])
+
+    # Filter for 2024 data only
+    data_2024 = crude_data[crude_data['date'].dt.year == 2024].copy()
+
+    # Get unique dates
+    unique_dates = data_2024['date'].dt.strftime('%Y-%m-%d').unique()
+    print(f"Found {len(unique_dates)} unique dates in 2024")
+
+    # Create list to store sentiment results
+    results = []
+
+    # Process each date
+    for date_str in tqdm(unique_dates):
+        # Get news titles for this date
+        titles = get_crude_oil_titles(date_str)
+
+        if titles:
+            # Calculate sentiment score for each title
+            sentiment_scores = [get_score(title) for title in titles]
+
+            # Calculate average sentiment
+            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+
+            results.append({
+                'date': date_str,
+                'avg_sentiment': avg_sentiment,
+                'num_articles': len(titles)
+            })
+
+            print(f"{date_str}: Found {len(titles)} articles, avg sentiment: {avg_sentiment:.4f}")
+        else:
+            # No articles found
+            results.append({
+                'date': date_str,
+                'avg_sentiment': None,
+                'num_articles': 0
+            })
+
+            print(f"{date_str}: No articles found")
+
+        # Add delay to avoid hitting API rate limits
+        time.sleep(1)
+
+    # Create final DataFrame
+    sentiment_df = pd.DataFrame(results)
+
+    # Save to CSV
+    sentiment_df.to_csv(output_path, index=False)
+    print(f"Saved sentiment results to {output_path}")
+
+if __name__ == "__main__":
+    main()
