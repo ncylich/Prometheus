@@ -9,6 +9,7 @@ except:
 
 def aggregate_to_daily(df):
     df = df.copy()
+    df['date'] = pd.to_datetime(df['date'])
     df['date'] = df['date'].dt.date
     aggregator = {}
     for col in df.columns:
@@ -19,7 +20,8 @@ def aggregate_to_daily(df):
         elif 'open' in col:
             aggregator[col] = 'first'
     df = df.groupby('date').agg(aggregator)
-
+    df = df.reset_index(names='date')
+    df['date'] = pd.to_datetime(df['date'])
     return df
 
 

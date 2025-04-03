@@ -27,8 +27,8 @@ def get_crude_oil_titles(date_str):
 
     # Create filters for crude oil related news
     f = Filters(
-        # keyword=["crude oil", "oil price", "petroleum", "WTI", "Brent"],
-        keyword="crude oil",
+        keyword=["crude oil", "oil price", "petroleum", "oil futures"],  #, "WTI", "Brent"],
+        # keyword="crude oil",
         start_date=date_str,
         end_date=next_day,
         num_records=250  # Max number of records allowed in one query,

@@ -55,6 +55,8 @@ def feature_preprocessing(df, sentiment_df):
     """
     # Add technical indicators
     df = ti.aggregate_to_daily(df)
+    df = df[df['date'].dt.year == 2024].copy()  # Only taking 2024 data
+    df = df.reset_index()
 
     prices = df['close']
     volumes = df['volume']
@@ -75,13 +77,12 @@ def feature_preprocessing(df, sentiment_df):
     volume_ratio = ti.calculate_volume_ratio(volumes, ma_period=30)  # Series
 
     # Sentiment features
-    sentiment_df = sentiment_df.set_index('date')
     sentiment = sentiment_df['avg_sentiment']
     five_avg_sent = sentiment_df['avg_sentiment'].rolling(window=5).mean()  # Series
-    twenty_avg_sent = sentiment_df.rolling(window=20).mean()
+    twenty_avg_sent = sentiment_df['avg_sentiment'].rolling(window=20).mean()
 
     # Combine all features into the DataFrame
-    df['future_price'] = df['close'].shift(-1)
+    df['future_price_movement'] = df['close'].pct_change().shift(-1)
 
     df['5D_Momentum'] = five_momentum
     df['20D_Momentum'] = twenty_momentum
@@ -94,7 +95,10 @@ def feature_preprocessing(df, sentiment_df):
     df['MACD_Line'] = macd['MACD_Line']
     df['Signal_Line'] = macd['Signal_Line']
     df['MACD_Diff'] = macd['Difference']
-    df['Bollinger_Width'] = bollinger['Bollinger_Width']
+    df['Bollinger_Width'] = bollinger['Width']
+    df['Bollinger_Upper'] = bollinger['Upper_Band']
+    df['Bollinger_Middle'] = bollinger['Middle_Band']
+    df['Bollinger_Lower'] = bollinger['Lower_Band']
 
     df['Volume_Ratio'] = volume_ratio
 
@@ -125,8 +129,8 @@ def create_and_train_model(df):
         features_df = features_df.set_index('date')
 
     # Separate features and target
-    X = features_df.drop('future_price', axis=1)
-    y = features_df['future_price']
+    X = features_df.drop('future_price_movement', axis=1)
+    y = features_df['future_price_movement']
 
     # Split data chronologically (last 20% for testing)
     train_size = int(len(df) * 0.8)
@@ -144,14 +148,14 @@ def create_and_train_model(df):
         n_estimators=200,
         subsample=0.8,
         colsample_bytree=0.8,
-        random_state=42
+        random_state=42,
+        eval_metric='rmse',
+        early_stopping_rounds=20,
     )
 
     model.fit(
         X_train, y_train,
         eval_set=[(X_train, y_train), (X_test, y_test)],
-        eval_metric='rmse',
-        early_stopping_rounds=20,
         verbose=100
     )
 
@@ -207,7 +211,7 @@ def visualize_results(y_test, y_pred, feature_importance):
     # Plot actual vs predicted values
     axes[0].plot(y_test.values, label='Actual', color='blue', alpha=0.7)
     axes[0].plot(y_pred, label='Predicted', color='red', alpha=0.7)
-    axes[0].set_title('Crude Oil Price: Actual vs Predicted')
+    axes[0].set_title('Crude Oil Price Movement: Actual vs Predicted')
     axes[0].set_xlabel('Test Sample Index')
     axes[0].set_ylabel('Price')
     axes[0].legend()
@@ -223,6 +227,17 @@ def visualize_results(y_test, y_pred, feature_importance):
         ax=axes[1]
     )
     axes[1].set_title('Top 10 Feature Importance')
+    axes[1].set_xlabel('Relative Importance (higher = more influential)')
+    axes[1].set_ylabel('Feature Name')
+
+    # Add annotation explaining importance values
+    total_importance = feature_importance['Importance'].sum()
+    top_importance = feature_importance.head(top_n)['Importance'].sum()
+    axes[1].annotate(f'Top {top_n} features: {top_importance / total_importance:.1%} of total importance',
+                     xy=(0.95, 0.05),
+                     xycoords='axes fraction',
+                     ha='right',
+                     bbox=dict(boxstyle='round', fc='lightyellow', alpha=0.8))
 
     plt.tight_layout()
     plt.show()
@@ -231,9 +246,9 @@ def visualize_results(y_test, y_pred, feature_importance):
     plt.figure(figsize=(8, 8))
     plt.scatter(y_test, y_pred, alpha=0.5)
     plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-    plt.xlabel('Actual Price')
-    plt.ylabel('Predicted Price')
-    plt.title('Actual vs Predicted Price')
+    plt.xlabel('Actual Price Movement')
+    plt.ylabel('Predicted Price Movement')
+    plt.title('Actual vs Predicted Price Movement')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
