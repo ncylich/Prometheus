@@ -56,18 +56,30 @@ def main():
     # Convert date column to datetime
     crude_data['date'] = pd.to_datetime(crude_data['date'])
 
-    # Filter for 2024 data only
-    data_2024 = crude_data[crude_data['date'].dt.year == 2024].copy()
+    # Filter for 2015 to 2024
+    filtered_data = crude_data[crude_data['date'].dt.year <= 2024]
+    filtered_data = filtered_data[filtered_data['date'].dt.year >= 2015].copy()
 
     # Get unique dates
-    unique_dates = data_2024['date'].dt.strftime('%Y-%m-%d').unique()
-    print(f"Found {len(unique_dates)} unique dates in 2024")
+    unique_dates = filtered_data['date'].dt.strftime('%Y-%m-%d').unique()
+    print(f"Found {len(unique_dates)} unique dates")
 
     # Create list to store sentiment results
     results = []
 
     # Process each date
+    time_limit = 5.1
+    last_start = time.time() - time_limit
     for date_str in tqdm(unique_dates):
+        # Sleep to avoid hitting API rate limits
+        curr_time = time.time()
+        wait_time = time_limit - (curr_time - last_start)
+        if wait_time > 0:
+            time.sleep(wait_time)
+            last_start = time.time()
+        else:
+            last_start = curr_time
+
         # Get news titles for this date
         titles = get_crude_oil_titles(date_str)
 

@@ -177,10 +177,9 @@ def create_and_train_model(df):
     }).sort_values(by='Importance', ascending=False)
 
     # Calculate direction prediction accuracy
-    if 'close' in X_test.columns:
-        actual_direction = np.sign(y_test - X_test['close'])
-        predicted_direction = np.sign(y_pred - X_test['close'].values)
-        metrics['direction_accuracy'] = np.mean(actual_direction == predicted_direction)
+    actual_direction = np.sign(y_test)
+    predicted_direction = np.sign(y_pred)
+    metrics['direction_accuracy'] = np.mean(actual_direction == predicted_direction)
 
     # Print results
     print("\nModel Performance:")
@@ -188,10 +187,7 @@ def create_and_train_model(df):
     print(f"RMSE: {metrics['rmse']:.4f}")
     print(f"MAE: {metrics['mae']:.4f}")
     print(f"R²: {metrics['r2']:.4f}")
-
-    if 'direction_accuracy' in metrics:
-        print(f"Direction Accuracy: {metrics['direction_accuracy']:.4f}")
-
+    print(f"Direction Accuracy: {metrics['direction_accuracy']:.4f}")
     print("\nTop 10 Most Important Features:")
     print(feature_importance.head(10))
 
