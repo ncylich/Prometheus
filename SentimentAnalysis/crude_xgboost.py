@@ -49,13 +49,64 @@ Simplified Input Features
 
 import technical_indicators as ti
 
+
+def simplified_feature_preprocessing(df, sentiment_df):
+    """
+    Create a simplified set of features focused on the most impactful indicators
+    to avoid overfitting with limited training data.
+
+    Parameters:
+        df (pd.DataFrame): Price and volume data
+        sentiment_df (pd.DataFrame): Sentiment data
+
+    Returns:
+        pd.DataFrame: Processed dataframe with key features
+    """
+    # Aggregate to daily data
+    df = ti.aggregate_to_daily(df)
+    # Match dates with sentiment data
+    df = df[df['date'].isin(sentiment_df['date'])]
+    df = df.reset_index()
+
+    prices = df['close']
+    volumes = df['volume']
+
+    # Core price features - just 2 key metrics
+    df['5D_Momentum'] = ti.calculate_price_momentum(prices, period=5)
+
+    # Key technical indicators - only 3 most important
+    df['RSI'] = ti.calculate_rsi(prices, period=14)
+    macd = ti.calculate_macd(prices)
+    df['MACD_Diff'] = macd['Difference']  # Histogram often most useful
+
+    # Volatility - single measure
+    bollinger = ti.calculate_bollinger_bands(prices)
+    df['Bollinger_Width'] = bollinger['Width']
+
+    # Volume - single metric
+    df['Volume_Ratio'] = ti.calculate_volume_ratio(volumes, ma_period=20)
+
+    # Sentiment - two key metrics
+    df['Sentiment'] = sentiment_df['avg_sentiment']
+    df['5D_Avg_Sentiment'] = sentiment_df['avg_sentiment'].rolling(window=5).mean()
+
+    # Target variable
+    df['future_price_movement'] = df['close'].pct_change().shift(-1)
+
+    # Drop rows with NaN values
+    df = df.dropna()
+    df = df.reset_index(drop=True)
+
+    return df
+
 def feature_preprocessing(df, sentiment_df):
     """
     Preprocess the DataFrame by adding technical indicators and sentiment features.
     """
     # Add technical indicators
     df = ti.aggregate_to_daily(df)
-    df = df[df['date'].dt.year == 2024].copy()  # Only taking 2024 data
+    # only taking overlaps
+    df = df[df['date'].isin(sentiment_df['date'])]
     df = df.reset_index()
 
     prices = df['close']
@@ -113,6 +164,36 @@ def feature_preprocessing(df, sentiment_df):
     return df
 
 
+def enhanced_feature_preprocessing(df, sentiment_df):
+    # Start with your existing preprocessing
+    df = feature_preprocessing(df, sentiment_df)
+
+    # Add lagged features
+    for col in ['close', 'RSI', 'MACD_Diff', 'Sentiment']:
+        for lag in [1, 2, 3, 5]:
+            df[f'{col}_lag_{lag}'] = df[col].shift(lag)
+
+    # Add rolling standard deviations (volatility measures)
+    for window in [5, 10, 20]:
+        df[f'price_volatility_{window}d'] = df['close'].rolling(window).std()
+        df[f'sentiment_volatility_{window}d'] = df['Sentiment'].rolling(window).std()
+
+    # Add price-sentiment interaction features
+    df['price_sentiment_ratio'] = df['close'] / (df['Sentiment'] + 1)  # Avoid division by zero
+    df['momentum_sentiment'] = df['5D_Momentum'] * df['Sentiment']
+
+    # Add day of week (potential seasonality)
+    if 'date' in df.columns:
+        df['day_of_week'] = pd.to_datetime(df['date']).dt.dayofweek
+        # One-hot encode day of week
+        for i in range(5):  # Trading days (0=Monday, 4=Friday)
+            df[f'day_{i}'] = (df['day_of_week'] == i).astype(int)
+
+    # Drop rows with NaN values
+    df = df.dropna()
+    return df
+
+
 def create_and_train_model(df):
     """
     Create, train, and evaluate an XGBoost model for predicting future oil prices.
@@ -152,6 +233,22 @@ def create_and_train_model(df):
         eval_metric='rmse',
         early_stopping_rounds=20,
     )
+    # Replace the existing XGBoost model configuration with this
+    # model = xgb.XGBRegressor(
+    #     objective='reg:squarederror',
+    #     learning_rate=0.01,  # Lower learning rate for better convergence
+    #     max_depth=4,  # Reduce complexity to prevent overfitting
+    #     n_estimators=500,  # More estimators with early stopping
+    #     subsample=0.7,  # Reduce subsample to prevent overfitting
+    #     colsample_bytree=0.7,  # Reduce feature sampling
+    #     min_child_weight=3,  # Increase to make model more conservative
+    #     gamma=0.1,  # Add minimum loss reduction for split
+    #     reg_alpha=0.1,  # L1 regularization
+    #     reg_lambda=1.0,  # L2 regularization
+    #     random_state=42,
+    #     eval_metric=['rmse', 'mae'],  # Track multiple metrics
+    #     early_stopping_rounds=50  # More patience for convergence
+    # )
 
     model.fit(
         X_train, y_train,
@@ -255,7 +352,9 @@ def run_xgboost_pipeline(df, sentiment_df):
     Run the complete XGBoost pipeline for crude oil price prediction.
     """
     # Process data and add features
-    processed_df = feature_preprocessing(df, sentiment_df)
+    # processed_df = simplified_feature_preprocessing(df, sentiment_df)
+    # processed_df = feature_preprocessing(df, sentiment_df)
+    processed_df = enhanced_feature_preprocessing(df, sentiment_df)
 
     # Create, train and test XGBoost model
     model, metrics, feature_importance = create_and_train_model(processed_df)
