@@ -31,8 +31,9 @@ def get_crude_oil_titles(date_str):
         # keyword="crude oil",
         start_date=date_str,
         end_date=next_day,
-        num_records=250  # Max number of records allowed in one query,
+        num_records=250,  # Max number of records allowed in one query,
         # country="US",  # Uncomment if you want to filter by country
+        language='English',
     )
 
     # TODO: Adaptively constrain and loop filters such that all articles are fetched (not just the first 250)
@@ -49,6 +50,10 @@ def main():
     # Read crude oil data
     input_path = '../Local_Data/futures_full_30min_contin_UNadj_11assu1/CL_full_30min_continuous_UNadjusted.csv'
     output_path = '../Local_Data/crude_sentiments.csv'
+    titles_path = '../Local_Data/crude_oil_titles.csv'
+
+    start_year = 2020
+    end_year = 2024  # inclusive
 
     print(f"Reading crude oil data from {input_path}")
     crude_data = pd.read_csv(input_path)
@@ -57,8 +62,8 @@ def main():
     crude_data['date'] = pd.to_datetime(crude_data['date'])
 
     # Filter for 2015 to 2024
-    filtered_data = crude_data[crude_data['date'].dt.year <= 2024]
-    filtered_data = filtered_data[filtered_data['date'].dt.year >= 2015].copy()
+    filtered_data = crude_data[crude_data['date'].dt.year >= start_year]
+    filtered_data = filtered_data[filtered_data['date'].dt.year <= end_year].copy()
 
     # Get unique dates
     unique_dates = filtered_data['date'].dt.strftime('%Y-%m-%d').unique()
@@ -66,6 +71,10 @@ def main():
 
     # Create list to store sentiment results
     results = []
+
+    with open(titles_path, 'w', encoding='utf-8') as f:
+        cols = ['date'] + ['title_' + str(i) for i in range(1, 251)]
+        f.write(','.join(cols) + '\n')
 
     # Process each date
     time_limit = 5.1
@@ -82,6 +91,11 @@ def main():
 
         # Get news titles for this date
         titles = get_crude_oil_titles(date_str)
+
+        # Write titles to CSV
+        with open(titles_path, 'a', encoding='utf-8') as f:
+            full_titles = titles + [''] * (250 - len(titles))  # Pad with empty strings
+            f.write(date_str + ',' + ','.join(full_titles) + '\n')
 
         if titles:
             # Calculate sentiment scores for all titles in batch
